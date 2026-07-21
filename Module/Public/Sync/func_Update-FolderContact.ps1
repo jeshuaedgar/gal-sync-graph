@@ -8,6 +8,7 @@ function Update-FolderContact {
         $updateContactBody = @{
             givenName      = $Contact.givenName
             surname        = $Contact.surname
+            mobilePhone    = $Contact.mobilePhone
             jobTitle       = $Contact.jobTitle
             department     = $Contact.department
             emailAddresses = $Contact.emailAddresses

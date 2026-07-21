@@ -22,10 +22,11 @@ function Get-FolderContact {
             $contactList | ForEach-Object {
                 $contactReturnObject += [pscustomobject]@{
                     businessPhones = $_.businessPhones
+                    mobilePhone    = $_.mobilePhone
                     displayname    = $_.displayName
                     givenName      = $_.givenName
                     surname        = $_.surname
-                    jobTitle       = $_.jobTitle                
+                    jobTitle       = $_.jobTitle
                     department     = $_.department
                     # homePhones     = [array]$_.homePhones
                     emailAddresses = $_.emailAddresses

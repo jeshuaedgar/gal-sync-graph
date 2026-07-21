@@ -6,10 +6,11 @@ function Get-GALContacts {
     )
     try {
         Write-VerboseEvent "Getting GAL contacts"
+        $selectProperties = "businessPhones,displayName,givenName,surname,jobTitle,department,mail,mobilePhone"
         $allContacts = if ($UseGraphSDK) {
-            Get-MgUser -All
+            Get-MgUser -All -Property ($selectProperties -split ",")
         } else {
-            New-GraphRequest -Endpoint "/users?`$select=*&`$top=999" -Beta
+            New-GraphRequest -Endpoint "/users?`$select=$($selectProperties)&`$top=999" -Beta
         }
         if (-not $ContactsWithoutPhoneNumber) {
             $allContacts = $allContacts | Where-Object { $_.businessPhones -or $_.mobilePhone }
@@ -21,10 +22,11 @@ function Get-GALContacts {
         $allContacts | ForEach-Object {
             $returnObject += [pscustomobject]@{
                 businessPhones = $_.businessPhones
+                mobilePhone    = $_.mobilePhone
                 displayname    = $_.displayName
                 givenName      = $_.givenName
                 surname        = $_.surname
-                jobTitle       = $_.jobTitle                
+                jobTitle       = $_.jobTitle
                 department     = $_.department
                 # homePhones     = if (-not $_.homePhones) { @() } else { @($_.homePhones) }
                 emailAddresses = @(@{

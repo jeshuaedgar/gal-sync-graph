@@ -32,6 +32,9 @@ function Sync-GALContacts {
         throw "Failed to create contact folder $($ContactFolderName) in mailbox $($Mailbox)"
     }
 
+    $removeContacts = @()
+    $updateContacts = @()
+
     if ($contactsInFolder) {
         $removeContacts = $contactsInFolder | Where-Object { $_.displayName -notin $ContactList.displayName }
         # Remove contacts that have duplicate displayNames. This is the only way to correctly sync
@@ -72,15 +75,10 @@ function Sync-GALContacts {
 
                 if ($name -ne "id") {
                     if ($folderContactValue -is [array] -and $name -eq "emailAddresses") {
-                        $folderContactHashes = @()
-                        $folderContactValue | ForEach-Object {
-                            $folderContactHashes += @{
-                                name = $_.name
-                                address = $_.address
-                            }
-                        }
-                        $difference = Compare-Object $contactListValue $folderContactHashes
-                        if ($null -ne $difference) {
+                        # Compare as strings - Compare-Object on hashtables compares references, not contents
+                        $folderContactPairs = @($folderContactValue | ForEach-Object { "$($_.name)|$($_.address)" }) | Sort-Object
+                        $contactListPairs = @($contactListValue | ForEach-Object { "$($_.name)|$($_.address)" }) | Sort-Object
+                        if (($contactListPairs -join ";") -ne ($folderContactPairs -join ";")) {
                             Write-Verbose "$name is different"
                             $returnContact = $contact
                         }
@@ -121,7 +119,7 @@ function Sync-GALContacts {
                     Write-LogEvent -Level Info -Message "Updated contact $($contact.displayName)"
                 }
                 catch {
-                    Write-LogEvent -Level Error -Message "Failed to update contact $($updatedContact.displayName)"
+                    Write-LogEvent -Level Error -Message "Failed to update contact $($contact.displayName)"
                 }
             }
         }

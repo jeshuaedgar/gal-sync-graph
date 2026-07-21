@@ -6,7 +6,7 @@ function Format-ErrorCode {
     )
 
     try {
-        if ($ErrorObject -isnot [Microsoft.PowerShell.Commands.InvokeRestMethodCommand]) {
+        if (-not $ErrorObject.Exception.Response) {
             return [PSCustomObject]@{
                 ErrorMessage  = $ErrorObject.Exception.Message
                 FullException = $ErrorObject.exception.GetType().fullname

@@ -10,11 +10,11 @@ function New-GraphRequest {
         throw "Not authenticated, please use 'Connect-GALSync' or re-run script"
     }
     $tokenLifeTime = New-TimeSpan -Start (Get-Date) -End $script:galSyncData.TokenExpiration
-    if ($tokenLifeTime.TotalMinutes -le 30) {
-        Write-Warning "Token will expire in $($tokenLifeTime.TotalMinutes) minutes, consider getting a new one by using 'Connect-GALSync'"
-    }
-    elseif ($tokenLifeTime.TotalMinutes -le 0) {
+    if ($tokenLifeTime.TotalMinutes -le 0) {
         throw "Token expired! Please reconnect using 'Connect-GALSync'..."
+    }
+    elseif ($tokenLifeTime.TotalMinutes -le 30) {
+        Write-Warning "Token will expire in $($tokenLifeTime.TotalMinutes) minutes, consider getting a new one by using 'Connect-GALSync'"
     }
 
     if ($Beta) {
@@ -33,7 +33,7 @@ function New-GraphRequest {
         Headers = $script:galSyncData.GraphAuthHeader
     }
     if ($Body) {
-        $reqSplat.Body += $Body | ConvertTo-Json
+        $reqSplat.Body = $Body | ConvertTo-Json -Depth 10
     }
 
     $reqSplat.GetEnumerator() | ForEach-Object {

@@ -12,7 +12,7 @@ param (
     [switch]$UseGraphSDK
 )
 
-Set-Variable -Name UseGraphSDK -Value $UseGraphSDK -Scope Global -Option ReadOnly
+Set-Variable -Name UseGraphSDK -Value $UseGraphSDK -Scope Global -Option ReadOnly -Force
 
 if ($LogPath) {
     Start-Transcript -OutputDirectory $LogPath
@@ -28,7 +28,7 @@ Connect-GALSync -CredentialFile $CredentialPath -Tenant $Tenant
 if ($Directory) { $mailBoxesToSync = (Get-GALContacts -ContactsWithoutPhoneNumber $true).emailaddresses | Select-Object -ExpandProperty address }
 elseif ($AzureADGroup) { $mailBoxesToSync = Get-GALAADGroupMembers -Name $AzureADGroup | Select-Object -ExpandProperty mail }
 elseif ($MailboxList -is [array]) { $mailBoxesToSync = $MailboxList }
-else { Write-Error "No valid mailbox input"; Read-Host; exit 1 }
+else { Write-Error "No valid mailbox input"; exit 1 }
 
 $GALContacts = Get-GALContacts -ContactsWithoutPhoneNumber $ContactsWithoutPhoneNumber -ContactsWithoutEmail $ContactsWithoutEmail
 
