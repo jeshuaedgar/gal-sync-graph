@@ -1,30 +1,33 @@
-#region discover module name
-$ScriptPath = $PSScriptRoot
-$ModuleName = $MyInvocation.MyCommand.Module.Name
-$ModuleName = $ExecutionContext.SessionState.Module
-Write-Verbose "Loading module $ModuleName..."
-#endregion discover module name
-
 #load variables for module
-Write-Verbose "Creating modules variables..."
-$script:galSyncData = @{
-    Tenant          = $null
-    GraphAuthHeader = $null
-    TokenExpiration = $null
+$script:galSyncData = $null
+
+$propertySet = "{929243f2-3b50-4543-a72f-be8081616276}"
+$script:sourceIdProperty = "String $propertySet Name GALSyncSourceId"
+$script:folderMarker = @{
+    id    = "String $propertySet Name GALSyncFolder"
+    value = "true"
+}
+
+$script:contactFields = [ordered]@{
+    displayName     = "Text"
+    givenName       = "Text"
+    surname         = "Text"
+    jobTitle        = "Text"
+    department      = "Text"
+    companyName     = "Text"
+    officeLocation  = "Text"
+    mobilePhone     = "Text"
+    businessPhones  = "List"
+    businessAddress = "Address"
+    emailAddresses  = "Email"
 }
 
 #load functions
-try {
-    foreach ($Scope in 'Private', 'Public') {
-        Get-ChildItem (Join-Path -Path $ScriptPath -ChildPath $Scope) -Recurse -Filter "*.ps1" | ForEach-Object {
-            . $_.FullName
-            if ($Scope -eq 'Public') {
-                Export-ModuleMember -Function ($_.BaseName -Split "_")[1] -ErrorAction Stop
-            }
+foreach ($scope in "Private", "Public") {
+    Get-ChildItem -Path (Join-Path -Path $PSScriptRoot -ChildPath $scope) -Recurse -Filter "*.ps1" | ForEach-Object {
+        . $_.FullName
+        if ($scope -eq "Public") {
+            Export-ModuleMember -Function ($_.BaseName -Split "_")[1]
         }
     }
-}
-catch {
-    Write-Error $_.Exception.Message
-    exit 1
 }
