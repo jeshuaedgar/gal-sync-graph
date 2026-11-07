@@ -1,0 +1,13 @@
+{
+    "TenantId": "contoso.onmicrosoft.com",
+    "ClientId": "00001111-aaaa-2222-bbbb-3333cccc4444",
+    "CertificateThumbprint": "0123456789ABCDEF0123456789ABCDEF01234567",
+    "ContactFolderName": "Global Address List",
+    "TargetGroup": "SG-GALSync-Users",
+    "UserFilter": "companyName eq 'Contoso'",
+    "ExcludeUser": ["svc-scanner@contoso.com"],
+    "ExcludeHiddenFromAddressList": false,
+    "IncludeOrgContacts": false,
+    "BusinessPhoneAsMobile": false,
+    "ThrottleLimit": 4
+}

@@ -1,10 +1,9 @@
 @echo off
+rem Paths are relative to this file, so the "Start in" folder of the scheduled task does not matter
 
-PowerShell.exe -ExecutionPolicy Bypass ^
--File "%CD%\Sync-Contacts.ps1" ^
--CredentialPath "%CD%\Credentials\credential.cred" ^
--Tenant "tenant.onmicrosoft.com" ^
--ContactFolderName "Global Address List" ^
--LogPath "%CD%\Logs" ^
--AzureADGroup "SG_GALSyncUsers"
-pause
+pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass ^
+-File "%~dp0Sync-Contacts.ps1" ^
+-ConfigFile "%~dp0Sync-Contacts.settings.json" ^
+-LogPath "%~dp0Logs"
+
+exit /b %ERRORLEVEL%

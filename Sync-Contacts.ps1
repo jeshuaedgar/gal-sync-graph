@@ -1,46 +1,86 @@
+[CmdletBinding(SupportsShouldProcess)]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSAvoidUsingPlainTextForPassword", "CredentialPath", Justification = "File path, not a secret.")]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSReviewUnusedParameter", "", Justification = "Parameters are read through PSBoundParameters.")]
 param (
-    [CmdletBinding()]
-    [parameter(Mandatory)][System.IO.FileInfo]$CredentialPath,
-    [parameter(Mandatory)][string]$Tenant,
-    [parameter(Mandatory)][string]$ContactFolderName,
-    [string]$AzureADGroup,
-    [string[]]$MailboxList,
-    [switch]$Directory,
+    [string]$ConfigFile,
     [string]$LogPath,
-    [switch]$ContactsWithoutPhoneNumber,
-    [switch]$ContactsWithoutEmail,
-    [switch]$UseGraphSDK
+
+    [string]$TenantId,
+    [string]$ClientId,
+    [string]$CertificateThumbprint,
+    [string]$CredentialPath,
+
+    [string]$ContactFolderName,
+    [switch]$AllUsers,
+    [string]$TargetGroup,
+    [string[]]$TargetMailbox,
+    [string]$SourceGroup,
+    [string[]]$ExcludeUser,
+    [string]$UserFilter,
+    [switch]$ExcludeHiddenFromAddressList,
+    [switch]$IncludeOrgContacts,
+    [switch]$BusinessPhoneAsMobile,
+    [switch]$IncludeUsersWithoutPhone,
+    [switch]$IncludeUsersWithoutEmail,
+    [switch]$IncludeDisabledUsers,
+    [switch]$IncludeGuests,
+    [int]$ThrottleLimit
 )
 
-Set-Variable -Name UseGraphSDK -Value $UseGraphSDK -Scope Global -Option ReadOnly
+$ErrorActionPreference = "Stop"
+$exitCode = 0
+$transcript = $false
 
-if ($LogPath) {
-    Start-Transcript -OutputDirectory $LogPath
-}
-
-Write-Verbose "Using $(If ($UseGraphSDK) {"Graph SDK"} Else {"raw REST requests"}) for connection"
-If ($UseGraphSDK) { Import-Module Microsoft.Graph.PersonalContacts }
-
-Import-Module .\Module\GAL-Sync.psm1 -Force
-Connect-GALSync -CredentialFile $CredentialPath -Tenant $Tenant
-
-# Get users based on input
-if ($Directory) { $mailBoxesToSync = (Get-GALContacts -ContactsWithoutPhoneNumber $true).emailaddresses | Select-Object -ExpandProperty address }
-elseif ($AzureADGroup) { $mailBoxesToSync = Get-GALAADGroupMembers -Name $AzureADGroup | Select-Object -ExpandProperty mail }
-elseif ($MailboxList -is [array]) { $mailBoxesToSync = $MailboxList }
-else { Write-Error "No valid mailbox input"; Read-Host; exit 1 }
-
-$GALContacts = Get-GALContacts -ContactsWithoutPhoneNumber $ContactsWithoutPhoneNumber -ContactsWithoutEmail $ContactsWithoutEmail
-
-foreach ($mailBox in $mailBoxesToSync) {
-    try {
-        Sync-GALContacts -Mailbox $mailBox -ContactList $GALContacts -ContactFolderName $ContactFolderName
+try {
+    $settings = @{}
+    if ($ConfigFile) {
+        $fileSettings = Get-Content -Path $ConfigFile -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
+        foreach ($key in $fileSettings.Keys) {
+            if ($MyInvocation.MyCommand.Parameters.ContainsKey($key)) { $settings[$key] = $fileSettings[$key] }
+            else { Write-Warning "Ignoring unknown setting $key in $ConfigFile" }
+        }
     }
-    catch {
-        Write-LogEvent -Level Error -Message $_.Exception.Message
-        Write-LogEvent -Level Error -Message "Failed to sync mailbox: $($mailBox)"
+    foreach ($key in $PSBoundParameters.Keys) { $settings[$key] = $PSBoundParameters[$key] }
+
+    if ($settings.LogPath) {
+        Start-Transcript -OutputDirectory $settings.LogPath -WhatIf:$false | Out-Null
+        $transcript = $true
+    }
+    # settings can come from -ConfigFile, so check them here instead of making the parameters mandatory
+    if (-not $settings.TenantId -or -not $settings.ContactFolderName) {
+        throw "TenantId and ContactFolderName are required"
+    }
+    if (@($settings.AllUsers, $settings.TargetGroup, $settings.TargetMailbox | Where-Object { $_ }).Count -ne 1) {
+        throw "Use exactly one of AllUsers, TargetGroup or TargetMailbox"
+    }
+
+    Import-Module (Join-Path $PSScriptRoot "Module/GAL-Sync.psd1") -Force
+    $connectParameters = (Get-Command Connect-GALSync).Parameters.Keys
+    $syncParameters = (Get-Command Invoke-GALSync).Parameters.Keys
+    $connect = @{}
+    $sync = @{}
+    foreach ($key in $settings.Keys) {
+        # a switch that is turned off would still select a parameter set
+        if ($settings[$key] -is [bool] -and -not $settings[$key]) { continue }
+        if ($key -in $syncParameters) { $sync[$key] = $settings[$key] }
+        elseif ($key -in $connectParameters) { $connect[$key] = $settings[$key] }
+    }
+
+    $connection = Connect-GALSync @connect
+    Write-Output "Connected to tenant $($connection.TenantId) as $($connection.ClientId)"
+    $results = @(Invoke-GALSync @sync)
+    $results | Format-Table -AutoSize | Out-String -Width 200 | Write-Output
+    if ($results | Where-Object { $_.Status -eq "Failed" }) {
+        $exitCode = 1
     }
 }
-if ($LogPath) {
-    Stop-Transcript
+catch {
+    Write-Error $_ -ErrorAction Continue
+    $exitCode = 1
 }
+finally {
+    if ($transcript) {
+        Stop-Transcript -WhatIf:$false | Out-Null
+    }
+}
+exit $exitCode
