@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install tools
+        shell: pwsh
+        run: |
+          Install-PSResource -Name Pester -Version 6.2.0 -Scope CurrentUser -TrustRepository -Quiet
+          Install-PSResource -Name PSScriptAnalyzer -Version 1.25.0 -Scope CurrentUser -TrustRepository -Quiet
+
+      - name: Check the tag matches the module version
+        shell: pwsh
+        run: |
+          $version = (Import-PowerShellDataFile Module/GAL-Sync.psd1).ModuleVersion
+          if ("v$version" -ne $env:GITHUB_REF_NAME) {
+            throw "Tag $env:GITHUB_REF_NAME does not match module version $version"
+          }
+
+      - name: Lint, test and package
+        shell: pwsh
+        run: ./build.ps1
+
+      - name: Build ARM template
+        run: |
+          az bicep install
+          az bicep build --file deploy/main.bicep --outfile out/main.json
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          awk -v v="$GITHUB_REF_NAME" '$0 == "# [" v "]" {found=1; next} /^# \[/ {found=0} found' CHANGELOG.md > out/release-notes.md
+          test -s out/release-notes.md
+          gh release create "$GITHUB_REF_NAME" \
+            out/GAL-Sync.zip out/GAL-Sync-Runbook.ps1 out/main.json \
+            --title "GAL-Sync $GITHUB_REF_NAME" \
+            --notes-file out/release-notes.md

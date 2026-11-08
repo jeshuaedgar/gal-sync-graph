@@ -1,0 +1,28 @@
+name: Integration
+
+# Runs the live tests against a test tenant
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    environment: integration
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install tools
+        shell: pwsh
+        run: Install-PSResource -Name Pester -Version 6.2.0 -Scope CurrentUser -TrustRepository -Quiet
+
+      - name: Run tests, including integration tests
+        shell: pwsh
+        env:
+          GALSYNC_TENANT_ID: ${{ secrets.GALSYNC_TENANT_ID }}
+          GALSYNC_CLIENT_ID: ${{ secrets.GALSYNC_CLIENT_ID }}
+          GALSYNC_CLIENT_SECRET: ${{ secrets.GALSYNC_CLIENT_SECRET }}
+          GALSYNC_TEST_MAILBOX: ${{ secrets.GALSYNC_TEST_MAILBOX }}
+        run: ./build.ps1 -Task Test -Integration

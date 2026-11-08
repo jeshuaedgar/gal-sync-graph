@@ -17,11 +17,13 @@ Steps to reproduce the behavior.
 A clear and concise description of what you expected to happen.
 
 **Logs**
-If applicable, add logs to help explain your problem. Use -LogPath and -Verbose in your run for the most detailed logs.
+If applicable, add logs to help explain your problem. Run with `-Verbose` (or set `verboseLogging = true` in Azure Automation) for the most detailed output. Remove names and email addresses before posting.
 
-**Desktop (please complete the following information):**
- - OS: [e.g. Windows, macOS, Linux]
- - PowerShell Version [e.g. v5, v7]
+**Environment (please complete the following information):**
+ - GAL-Sync version [e.g. 1.0.0]
+ - Where it runs [e.g. Azure Automation, Task Scheduler, interactive]
+ - Authentication [e.g. managed identity, certificate, client secret]
+ - PowerShell version [output of `$PSVersionTable.PSVersion`]
 
 **Additional context**
 Add any other context about the problem here.
