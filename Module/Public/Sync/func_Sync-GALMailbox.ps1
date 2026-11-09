@@ -8,14 +8,14 @@ function Sync-GALMailbox {
     # mailboxes without Exchange Online (no licence, deleted, not a user mailbox) can not be synced
     $skipCodes = "MailboxNotEnabledForRESTAPI", "MailboxNotSupportedForRESTAPI", "ErrorNonExistentMailbox", "ErrorInvalidUser", "ResourceNotFound"
     $result = [ordered]@{
-        Mailbox    = $Mailbox
-        Status     = "Succeeded"
-        Created    = 0
-        Updated    = 0
-        Removed    = 0
-        Unchanged  = 0
-        Failed     = 0
-        Message    = $null
+        Mailbox   = $Mailbox
+        Status    = "Succeeded"
+        Created   = 0
+        Updated   = 0
+        Removed   = 0
+        Unchanged = 0
+        Failed    = 0
+        Message   = $null
     }
 
     try {

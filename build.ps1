@@ -1,16 +1,37 @@
 param (
-    [ValidateSet("Analyze", "Test", "Package")][string[]]$Task = @("Analyze", "Test", "Package"),
+    [ValidateSet("Format", "Analyze", "Test", "Package")][string[]]$Task = @("Analyze", "Test", "Package"),
     [string]$OutputPath = (Join-Path $PSScriptRoot "out"),
     [switch]$Integration
 )
 
 $ErrorActionPreference = "Stop"
 New-Item -Path $OutputPath -ItemType Directory -Force | Out-Null
+$analyzerSettings = Join-Path $PSScriptRoot "PSScriptAnalyzerSettings.psd1"
+$scripts = Get-ChildItem -Path $PSScriptRoot -Recurse -File -Include "*.ps1", "*.psm1", "*.psd1" | Where-Object { $_.FullName -notlike "$OutputPath*" }
+
+if ("Format" -in $Task -or "Analyze" -in $Task) {
+    Import-Module PSScriptAnalyzer -MinimumVersion 1.25.0
+    $unformatted = foreach ($script in $scripts) {
+        $text = [System.IO.File]::ReadAllText($script.FullName)
+        $formatted = Invoke-Formatter -ScriptDefinition $text -Settings $analyzerSettings
+        if ($formatted -cne $text) {
+            if ("Format" -in $Task) {
+                [System.IO.File]::WriteAllText($script.FullName, $formatted)
+                Write-Output "Formatted $([System.IO.Path]::GetRelativePath($PSScriptRoot, $script.FullName))"
+            }
+            else {
+                [System.IO.Path]::GetRelativePath($PSScriptRoot, $script.FullName)
+            }
+        }
+    }
+}
 
 if ("Analyze" -in $Task) {
-    Import-Module PSScriptAnalyzer -MinimumVersion 1.25.0
+    if ($unformatted) {
+        throw "Not formatted, run ./build.ps1 -Task Format: $($unformatted -join ", ")"
+    }
     $paths = @("Module", "runbook", "deploy" | ForEach-Object { Join-Path $PSScriptRoot $_ }) + @(Get-ChildItem -Path $PSScriptRoot -Filter "*.ps1").FullName
-    $issues = @(foreach ($path in $paths) { Invoke-ScriptAnalyzer -Path $path -Recurse -Settings (Join-Path $PSScriptRoot "PSScriptAnalyzerSettings.psd1") })
+    $issues = @(foreach ($path in $paths) { Invoke-ScriptAnalyzer -Path $path -Recurse -Settings $analyzerSettings })
     if ($issues) {
         $issues | Format-Table RuleName, Severity, ScriptName, Line, Message -AutoSize -Wrap | Out-String -Width 220 | Write-Output
         throw "PSScriptAnalyzer found $($issues.Count) issue(s)"

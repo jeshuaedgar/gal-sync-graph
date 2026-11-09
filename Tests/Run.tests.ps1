@@ -223,7 +223,7 @@ Describe "Sync-Contacts.ps1" {
 
     It "Should warn about unknown settings" {
         @{ TenantId = "contoso.onmicrosoft.com"; CredentialPath = New-CredentialFile; ContactFolderName = "GAL"; TargetMailbox = "ann@contoso.com"; Colour = "blue" } |
-            ConvertTo-Json | Set-Content -Path $ConfigFile
+        ConvertTo-Json | Set-Content -Path $ConfigFile
         & $Script -ConfigFile $ConfigFile -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
         $warnings.Message | Should -BeLike "*Colour*"
         $LASTEXITCODE | Should -Be 0

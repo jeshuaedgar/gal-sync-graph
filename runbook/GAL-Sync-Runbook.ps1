@@ -1,6 +1,6 @@
 param (
-  [string]$ConfigurationVariable = "GALSyncConfig",
-  [bool]$WhatIfMode = $false
+    [string]$ConfigurationVariable = "GALSyncConfig",
+    [bool]$WhatIfMode = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,7 +8,7 @@ $ProgressPreference = "SilentlyContinue"
 
 $settings = Get-AutomationVariable -Name $ConfigurationVariable | ConvertFrom-Json -AsHashtable
 if ($WhatIfMode) {
-  $settings.WhatIf = $true
+    $settings.WhatIf = $true
 }
 
 Import-Module -Name GAL-Sync
@@ -17,11 +17,11 @@ $syncParameters = (Get-Command Invoke-GALSync).Parameters.Keys
 $connect = @{ ManagedIdentity = $true }
 $sync = @{}
 foreach ($key in $settings.Keys) {
-  # a switch that is turned off would still select a parameter set
-  if ($settings[$key] -is [bool] -and -not $settings[$key]) { continue }
-  if ($key -in $syncParameters) { $sync[$key] = $settings[$key] }
-  elseif ($key -in $connectParameters) { $connect[$key] = $settings[$key] }
-  else { Write-Warning "Ignoring unknown setting $key in $ConfigurationVariable" }
+    # a switch that is turned off would still select a parameter set
+    if ($settings[$key] -is [bool] -and -not $settings[$key]) { continue }
+    if ($key -in $syncParameters) { $sync[$key] = $settings[$key] }
+    elseif ($key -in $connectParameters) { $connect[$key] = $settings[$key] }
+    else { Write-Warning "Ignoring unknown setting $key in $ConfigurationVariable" }
 }
 
 $connection = Connect-GALSync @connect
@@ -32,5 +32,5 @@ $results | Format-Table -AutoSize | Out-String -Width 200 | Write-Output
 
 $failed = @($results | Where-Object { $_.Status -eq "Failed" })
 if ($failed) {
-  throw "$($failed.Count) of $($results.Count) mailbox(es) failed to sync"
+    throw "$($failed.Count) of $($results.Count) mailbox(es) failed to sync"
 }

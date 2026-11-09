@@ -124,11 +124,15 @@ The parameters of `Sync-Contacts.ps1` changed as well:
 
 ## Development
 
+With [just](https://github.com/casey/just), run `just setup` once and then `just` to see the recipes (`just build`, `just fmt`, `just lint`, `just test`, `just bicep`). Without it:
+
 ```powershell
 Install-PSResource Pester -Version 6.2.0
 Install-PSResource PSScriptAnalyzer -Version 1.25.0
 ./build.ps1
 ```
+
+`./build.ps1` fails when a script is not formatted, `./build.ps1 -Task Format` (or `just fmt`) formats them. The rules are in [PSScriptAnalyzerSettings.psd1](PSScriptAnalyzerSettings.psd1): the Stroustrup preset of the VS Code PowerShell extension, with 4 spaces.
 
 The tests run against a fake Microsoft Graph. To also run them against a test tenant, set `GALSYNC_TENANT_ID`, `GALSYNC_CLIENT_ID`, `GALSYNC_CLIENT_SECRET` and `GALSYNC_TEST_MAILBOX` and run `./build.ps1 -Task Test -Integration`.
 
