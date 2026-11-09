@@ -27,9 +27,9 @@
     PrivateData          = @{
         PSData = @{
             Tags         = @("Microsoft365", "Graph", "GAL", "Contacts", "Exchange", "AzureAutomation")
-            LicenseUri   = "https://github.com/JeshuaEdgar/gal-sync-graph/blob/main/LICENSE"
+            LicenseUri   = "https://github.com/JeshuaEdgar/gal-sync-graph/blob/master/LICENSE"
             ProjectUri   = "https://github.com/JeshuaEdgar/gal-sync-graph"
-            ReleaseNotes = "https://github.com/JeshuaEdgar/gal-sync-graph/blob/main/CHANGELOG.md"
+            ReleaseNotes = "https://github.com/JeshuaEdgar/gal-sync-graph/blob/master/CHANGELOG.md"
         }
     }
 }
