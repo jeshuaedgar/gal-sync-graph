@@ -43,7 +43,7 @@ function Connect-GALSync {
         }
         "CredentialFile" {
             if (-not (Test-Path -Path $CredentialPath -PathType Leaf)) {
-                throw "Credential file $CredentialPath does not exist, create one with New-StoredCredential.ps1"
+                throw "Credential file $CredentialPath does not exist, create one as the account that runs the sync: Get-Credential -UserName <app id> | Export-Clixml -Path `"$CredentialPath`""
             }
             $Credential = Import-Clixml -Path $CredentialPath
         }

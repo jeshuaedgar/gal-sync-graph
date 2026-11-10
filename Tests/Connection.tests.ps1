@@ -54,7 +54,7 @@ Describe "Connect-GALSync" {
     }
 
     It "Should explain a missing credential file" {
-        { Connect-GALSync -TenantId "contoso.onmicrosoft.com" -CredentialPath (Join-Path $TestDrive "missing.cred") } | Should -Throw "*New-StoredCredential.ps1*"
+        { Connect-GALSync -TenantId "contoso.onmicrosoft.com" -CredentialPath (Join-Path $TestDrive "missing.cred") } | Should -Throw "*Export-Clixml*"
     }
 
     It "Should use the Azure Automation managed identity endpoint when it is available" {
