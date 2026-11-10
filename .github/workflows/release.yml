@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags: ["v*"]
 
 permissions:
   contents: write
@@ -22,7 +22,9 @@ jobs:
       - name: Check the tag matches the module version
         shell: pwsh
         run: |
-          $version = (Import-PowerShellDataFile Module/GAL-Sync.psd1).ModuleVersion
+          $manifest = Import-PowerShellDataFile Module/GAL-Sync.psd1
+          $version = $manifest.ModuleVersion
+          if ($manifest.PrivateData.PSData.Prerelease) { $version += "-$($manifest.PrivateData.PSData.Prerelease)" }
           if ("v$version" -ne $env:GITHUB_REF_NAME) {
             throw "Tag $env:GITHUB_REF_NAME does not match module version $version"
           }
@@ -42,7 +44,45 @@ jobs:
         run: |
           awk -v v="$GITHUB_REF_NAME" '$0 == "# [" v "]" {found=1; next} /^# \[/ {found=0} found' CHANGELOG.md > out/release-notes.md
           test -s out/release-notes.md
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
           gh release create "$GITHUB_REF_NAME" \
             out/GAL-Sync.zip out/GAL-Sync-Runbook.ps1 out/main.json \
             --title "GAL-Sync $GITHUB_REF_NAME" \
-            --notes-file out/release-notes.md
+            --notes-file out/release-notes.md \
+            $prerelease
+
+      - name: Upload module
+        uses: actions/upload-artifact@v7
+        with:
+          name: module
+          path: out/GAL-Sync/
+
+  publish-gallery:
+    name: Publish to the PowerShell Gallery
+    needs: release
+    runs-on: ubuntu-latest
+    environment: psgallery
+    permissions:
+      contents: read
+    steps:
+      - name: Download module
+        uses: actions/download-artifact@v7
+        with:
+          name: module
+          path: GAL-Sync
+
+      - name: Publish
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          if (-not $env:PSGALLERY_API_KEY) { throw "The PSGALLERY_API_KEY secret is not set in the psgallery environment" }
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          # a rerun of this workflow must not fail on a version that is already published
+          if (Find-PSResource -Name GAL-Sync -Version $version -Prerelease -Repository PSGallery -ErrorAction SilentlyContinue) {
+            Write-Output "GAL-Sync $version is already on the PowerShell Gallery"
+            return
+          }
+          Publish-PSResource -Path ./GAL-Sync -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY
+          Write-Output "Published GAL-Sync $version to the PowerShell Gallery"
