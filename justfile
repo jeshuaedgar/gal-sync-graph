@@ -12,27 +12,27 @@ setup:
 
 # lint, test and package, like CI does
 build:
-    ./build.ps1
+    ./scripts/build.ps1
 
 # format all PowerShell scripts
 fmt:
-    ./build.ps1 -Task Format
+    ./scripts/build.ps1 -Task Format
 
 # check formatting and run PSScriptAnalyzer
 lint:
-    ./build.ps1 -Task Analyze
+    ./scripts/build.ps1 -Task Analyze
 
 # run the tests
 test:
-    ./build.ps1 -Task Test
+    ./scripts/build.ps1 -Task Test
 
 # run the tests against a test tenant as well (needs the GALSYNC_* variables)
 test-integration:
-    ./build.ps1 -Task Test -Integration
+    ./scripts/build.ps1 -Task Test -Integration
 
 # build out/GAL-Sync.zip and the runbook
 package:
-    ./build.ps1 -Task Package
+    ./scripts/build.ps1 -Task Package
 
 # build and lint the Bicep templates
 bicep:

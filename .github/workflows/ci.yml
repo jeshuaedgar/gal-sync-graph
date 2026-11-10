@@ -31,7 +31,7 @@ jobs:
 
       - name: Lint, test and package
         shell: pwsh
-        run: ./build.ps1
+        run: ./scripts/build.ps1
 
       - name: Upload build output
         if: always() && matrix.os == 'ubuntu-latest'

@@ -1,13 +1,14 @@
 param (
     [ValidateSet("Format", "Analyze", "Test", "Package")][string[]]$Task = @("Analyze", "Test", "Package"),
-    [string]$OutputPath = (Join-Path $PSScriptRoot "out"),
+    [string]$OutputPath = (Join-Path (Split-Path $PSScriptRoot) "out"),
     [switch]$Integration
 )
 
 $ErrorActionPreference = "Stop"
+$root = Split-Path $PSScriptRoot
 New-Item -Path $OutputPath -ItemType Directory -Force | Out-Null
-$analyzerSettings = Join-Path $PSScriptRoot "PSScriptAnalyzerSettings.psd1"
-$scripts = Get-ChildItem -Path $PSScriptRoot -Recurse -File -Include "*.ps1", "*.psm1", "*.psd1" | Where-Object { $_.FullName -notlike "$OutputPath*" }
+$analyzerSettings = Join-Path $root "PSScriptAnalyzerSettings.psd1"
+$scripts = Get-ChildItem -Path $root -Recurse -File -Include "*.ps1", "*.psm1", "*.psd1" | Where-Object { $_.FullName -notlike "$OutputPath*" }
 
 if ("Format" -in $Task -or "Analyze" -in $Task) {
     Import-Module PSScriptAnalyzer -MinimumVersion 1.25.0
@@ -17,10 +18,10 @@ if ("Format" -in $Task -or "Analyze" -in $Task) {
         if ($formatted -cne $text) {
             if ("Format" -in $Task) {
                 [System.IO.File]::WriteAllText($script.FullName, $formatted)
-                Write-Output "Formatted $([System.IO.Path]::GetRelativePath($PSScriptRoot, $script.FullName))"
+                Write-Output "Formatted $([System.IO.Path]::GetRelativePath($root, $script.FullName))"
             }
             else {
-                [System.IO.Path]::GetRelativePath($PSScriptRoot, $script.FullName)
+                [System.IO.Path]::GetRelativePath($root, $script.FullName)
             }
         }
     }
@@ -28,9 +29,9 @@ if ("Format" -in $Task -or "Analyze" -in $Task) {
 
 if ("Analyze" -in $Task) {
     if ($unformatted) {
-        throw "Not formatted, run ./build.ps1 -Task Format: $($unformatted -join ", ")"
+        throw "Not formatted, run ./scripts/build.ps1 -Task Format: $($unformatted -join ", ")"
     }
-    $paths = @("Module", "runbook", "deploy" | ForEach-Object { Join-Path $PSScriptRoot $_ }) + @(Get-ChildItem -Path $PSScriptRoot -Filter "*.ps1").FullName
+    $paths = @("Module", "runbook", "deploy", "scripts" | ForEach-Object { Join-Path $root $_ }) + @(Get-ChildItem -Path $root -Filter "*.ps1").FullName
     $issues = @(foreach ($path in $paths) { Invoke-ScriptAnalyzer -Path $path -Recurse -Settings $analyzerSettings })
     if ($issues) {
         $issues | Format-Table RuleName, Severity, ScriptName, Line, Message -AutoSize -Wrap | Out-String -Width 220 | Write-Output
@@ -42,7 +43,7 @@ if ("Analyze" -in $Task) {
 if ("Test" -in $Task) {
     Import-Module Pester -MinimumVersion 6.2.0
     $configuration = New-PesterConfiguration
-    $configuration.Run.Path = @(Get-ChildItem -Path (Join-Path $PSScriptRoot "Tests") -Filter "*.tests.ps1" -Recurse).FullName
+    $configuration.Run.Path = @(Get-ChildItem -Path (Join-Path $root "Tests") -Filter "*.tests.ps1" -Recurse).FullName
     $configuration.Run.PassThru = $true
     $configuration.Filter.ExcludeTag = if ($Integration) { @() } else { @("Integration") }
     $configuration.Output.Verbosity = "Detailed"
@@ -58,9 +59,11 @@ if ("Test" -in $Task) {
 if ("Package" -in $Task) {
     $staging = Join-Path $OutputPath "GAL-Sync"
     Remove-Item -Path $staging -Recurse -Force -ErrorAction SilentlyContinue
-    Copy-Item -Path (Join-Path $PSScriptRoot "Module") -Destination $staging -Recurse
+    Copy-Item -Path (Join-Path $root "Module") -Destination $staging -Recurse
     # Azure Automation expects GAL-Sync.zip to contain a GAL-Sync folder with the manifest in it
     Compress-Archive -Path $staging -DestinationPath (Join-Path $OutputPath "GAL-Sync.zip") -Force
-    Copy-Item -Path (Join-Path $PSScriptRoot "runbook/GAL-Sync-Runbook.ps1") -Destination $OutputPath -Force
-    Write-Output "Packaged GAL-Sync $((Import-PowerShellDataFile (Join-Path $PSScriptRoot "Module/GAL-Sync.psd1")).ModuleVersion) to $OutputPath"
+    Copy-Item -Path (Join-Path $root "runbook/GAL-Sync-Runbook.ps1") -Destination $OutputPath -Force
+    $manifest = Import-PowerShellDataFile (Join-Path $root "Module/GAL-Sync.psd1")
+    $version = $manifest.ModuleVersion + ($manifest.PrivateData.PSData.Prerelease ? "-$($manifest.PrivateData.PSData.Prerelease)" : "")
+    Write-Output "Packaged GAL-Sync $version to $OutputPath"
 }
