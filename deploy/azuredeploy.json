@@ -1,0 +1,540 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.49.2.45890",
+      "templateHash": "13627311382677157614"
+    },
+    "description": "GAL-Sync on Azure Automation: PowerShell 7.6 runtime environment, managed identity, runbook and schedule."
+  },
+  "parameters": {
+    "automationAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Automation account."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location of the Automation account."
+      }
+    },
+    "releaseVersion": {
+      "type": "string",
+      "defaultValue": "1.0.0",
+      "metadata": {
+        "description": "GAL-Sync release to deploy, for example 1.0.0 or 1.0.0-beta1. Used to build the default module and runbook URLs."
+      }
+    },
+    "moduleSource": {
+      "type": "string",
+      "defaultValue": "GitHub",
+      "allowedValues": [
+        "GitHub",
+        "PSGallery"
+      ],
+      "metadata": {
+        "description": "Where the module is downloaded from. Ignored when modulePackageUri is set."
+      }
+    },
+    "modulePackageUri": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional URL of your own module package: a zip with a GAL-Sync folder inside, or a .nupkg. Overrides moduleSource."
+      }
+    },
+    "runbookUri": {
+      "type": "string",
+      "defaultValue": "[format('https://github.com/JeshuaEdgar/gal-sync-graph/releases/download/v{0}/GAL-Sync-Runbook.ps1', parameters('releaseVersion'))]",
+      "metadata": {
+        "description": "URL of the runbook script. Defaults to the GitHub release asset."
+      }
+    },
+    "contactFolderName": {
+      "type": "string",
+      "defaultValue": "Global Address List",
+      "metadata": {
+        "description": "Name of the contact folder created in each mailbox."
+      }
+    },
+    "signInMethod": {
+      "type": "string",
+      "defaultValue": "ManagedIdentity",
+      "allowedValues": [
+        "ManagedIdentity",
+        "Connection"
+      ],
+      "metadata": {
+        "description": "How the runbook signs in to Microsoft Graph. ManagedIdentity only works for the tenant of the Automation account. Connection uses an app registration, for example for another tenant, stored in a GALSync connection asset."
+      }
+    },
+    "tenantId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Connection: tenant ID or contoso.onmicrosoft.com of the tenant to sync."
+      }
+    },
+    "clientId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Connection: application (client) ID of the app registration."
+      }
+    },
+    "clientSecret": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Connection: client secret of the app registration. Leave empty when you use a certificate."
+      }
+    },
+    "certificateName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Connection: name of a certificate asset (.pfx with private key) in the Automation account. Upload it under Certificates, it is used instead of the client secret."
+      }
+    },
+    "targetMode": {
+      "type": "string",
+      "defaultValue": "Group",
+      "allowedValues": [
+        "AllUsers",
+        "Group",
+        "Mailbox"
+      ],
+      "metadata": {
+        "description": "Which mailboxes receive the contacts."
+      }
+    },
+    "targetGroup": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Group (display name or object ID) whose members receive the contacts. Used when targetMode is Group."
+      }
+    },
+    "targetMailboxes": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Comma-separated mailboxes that receive the contacts. Used when targetMode is Mailbox."
+      }
+    },
+    "sourceGroup": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional group (display name or object ID): only its members are synced as contacts."
+      }
+    },
+    "excludeUsers": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional comma-separated object IDs, UPNs or email addresses to leave out of the contacts."
+      }
+    },
+    "includeUsersWithoutPhone": {
+      "type": "bool",
+      "defaultValue": false
+    },
+    "includeUsersWithoutEmail": {
+      "type": "bool",
+      "defaultValue": false
+    },
+    "includeDisabledUsers": {
+      "type": "bool",
+      "defaultValue": false
+    },
+    "includeGuests": {
+      "type": "bool",
+      "defaultValue": false
+    },
+    "userFilter": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional OData filter for the users that become contacts, for example \"companyName eq 'Contoso'\"."
+      }
+    },
+    "excludeHiddenFromAddressList": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Leave out users that Microsoft Graph reports as hidden from the address list. Best effort: this value can be out of sync with Exchange Online."
+      }
+    },
+    "includeOrgContacts": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Also sync organisational (mail) contacts. Grants OrgContact.Read.All when grantGraphPermissions is true."
+      }
+    },
+    "businessPhoneAsMobile": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "When a user has no mobile number, show their business number as the contact's mobile number."
+      }
+    },
+    "throttleLimit": {
+      "type": "int",
+      "defaultValue": 4,
+      "minValue": 1,
+      "maxValue": 16,
+      "metadata": {
+        "description": "Mailboxes synced at the same time."
+      }
+    },
+    "reportOnly": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Report planned changes without writing to mailboxes."
+      }
+    },
+    "verboseLogging": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Log verbose records of the runbook: a table of the results and details per mailbox. Can also be switched under Logging and tracing of the runbook."
+      }
+    },
+    "grantGraphPermissions": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Grant the Microsoft Graph permissions to the managed identity in this deployment. Needs Privileged Role Administrator (or Global Administrator). Only used with ManagedIdentity."
+      }
+    },
+    "scheduleFrequency": {
+      "type": "string",
+      "defaultValue": "Day",
+      "allowedValues": [
+        "Hour",
+        "Day"
+      ],
+      "metadata": {
+        "description": "How often the sync runs."
+      }
+    },
+    "scheduleInterval": {
+      "type": "int",
+      "defaultValue": 1,
+      "minValue": 1
+    },
+    "scheduleStartTime": {
+      "type": "string",
+      "defaultValue": "[dateTimeAdd(utcNow(), 'PT1H')]",
+      "metadata": {
+        "description": "First run (ISO 8601, at least 5 minutes in the future). Defaults to one hour after deployment."
+      }
+    },
+    "scheduleTimeZone": {
+      "type": "string",
+      "defaultValue": "UTC",
+      "metadata": {
+        "description": "Time zone of the schedule, for example Europe/Amsterdam."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {}
+    }
+  },
+  "variables": {
+    "runtimeEnvironmentName": "GALSync-PowerShell-7-6",
+    "runbookName": "GAL-Sync",
+    "configurationVariableName": "GALSyncConfig",
+    "moduleUri": "[if(not(empty(parameters('modulePackageUri'))), parameters('modulePackageUri'), if(equals(parameters('moduleSource'), 'PSGallery'), format('https://www.powershellgallery.com/api/v2/package/GAL-Sync/{0}', parameters('releaseVersion')), format('https://github.com/JeshuaEdgar/gal-sync-graph/releases/download/v{0}/GAL-Sync.zip', parameters('releaseVersion'))))]",
+    "connectionName": "GAL-Sync",
+    "signInConfiguration": "[if(equals(parameters('signInMethod'), 'Connection'), createObject('AutomationConnection', variables('connectionName')), createObject())]",
+    "configuration": "[union(variables('signInConfiguration'), if(equals(parameters('targetMode'), 'AllUsers'), createObject('AllUsers', true()), if(equals(parameters('targetMode'), 'Group'), createObject('TargetGroup', parameters('targetGroup')), createObject('TargetMailbox', parameters('targetMailboxes')))), if(empty(parameters('sourceGroup')), createObject(), createObject('SourceGroup', parameters('sourceGroup'))), if(empty(parameters('excludeUsers')), createObject(), createObject('ExcludeUser', parameters('excludeUsers'))), if(empty(parameters('userFilter')), createObject(), createObject('UserFilter', parameters('userFilter'))), createObject('ContactFolderName', parameters('contactFolderName'), 'IncludeUsersWithoutPhone', parameters('includeUsersWithoutPhone'), 'IncludeUsersWithoutEmail', parameters('includeUsersWithoutEmail'), 'IncludeDisabledUsers', parameters('includeDisabledUsers'), 'IncludeGuests', parameters('includeGuests'), 'ExcludeHiddenFromAddressList', parameters('excludeHiddenFromAddressList'), 'IncludeOrgContacts', parameters('includeOrgContacts'), 'BusinessPhoneAsMobile', parameters('businessPhoneAsMobile'), 'ThrottleLimit', parameters('throttleLimit'), 'WhatIf', parameters('reportOnly')))]",
+    "configurationArray": "[string(createArray(string(variables('configuration'))))]",
+    "configurationVariableValue": "[substring(variables('configurationArray'), 1, max(sub(length(variables('configurationArray')), 2), 0))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Automation/automationAccounts",
+      "apiVersion": "2024-10-23",
+      "name": "[parameters('automationAccountName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "sku": {
+          "name": "Basic"
+        },
+        "disableLocalAuth": true
+      }
+    },
+    {
+      "type": "Microsoft.Automation/automationAccounts/runtimeEnvironments",
+      "apiVersion": "2024-10-23",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), variables('runtimeEnvironmentName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "description": "PowerShell 7.6 (LTS) for GAL-Sync. No Az modules are needed.",
+        "runtime": {
+          "language": "PowerShell",
+          "version": "7.6"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Automation/automationAccounts/runtimeEnvironments/packages",
+      "apiVersion": "2024-10-23",
+      "name": "[format('{0}/{1}/{2}', parameters('automationAccountName'), variables('runtimeEnvironmentName'), 'GAL-Sync')]",
+      "properties": {
+        "contentLink": {
+          "uri": "[variables('moduleUri')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts/runtimeEnvironments', parameters('automationAccountName'), variables('runtimeEnvironmentName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Automation/automationAccounts/variables",
+      "apiVersion": "2024-10-23",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), variables('configurationVariableName'))]",
+      "properties": {
+        "description": "GAL-Sync settings (JSON). Edit here or redeploy the template.",
+        "isEncrypted": false,
+        "value": "[variables('configurationVariableValue')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+      ]
+    },
+    {
+      "condition": "[equals(parameters('signInMethod'), 'Connection')]",
+      "type": "Microsoft.Automation/automationAccounts/connectionTypes",
+      "apiVersion": "2024-10-23",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), 'GALSync')]",
+      "properties": {
+        "isGlobal": false,
+        "fieldDefinitions": {
+          "TenantId": {
+            "isEncrypted": false,
+            "isOptional": false,
+            "type": "System.String"
+          },
+          "ClientId": {
+            "isEncrypted": false,
+            "isOptional": false,
+            "type": "System.String"
+          },
+          "ClientSecret": {
+            "isEncrypted": true,
+            "isOptional": true,
+            "type": "System.String"
+          },
+          "CertificateName": {
+            "isEncrypted": false,
+            "isOptional": true,
+            "type": "System.String"
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+      ]
+    },
+    {
+      "condition": "[equals(parameters('signInMethod'), 'Connection')]",
+      "type": "Microsoft.Automation/automationAccounts/connections",
+      "apiVersion": "2024-10-23",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), variables('connectionName'))]",
+      "properties": {
+        "description": "App registration GAL-Sync signs in with. Fill in ClientSecret or CertificateName.",
+        "connectionType": {
+          "name": "GALSync"
+        },
+        "fieldDefinitionValues": {
+          "TenantId": "[parameters('tenantId')]",
+          "ClientId": "[parameters('clientId')]",
+          "ClientSecret": "[parameters('clientSecret')]",
+          "CertificateName": "[parameters('certificateName')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+        "[resourceId('Microsoft.Automation/automationAccounts/connectionTypes', parameters('automationAccountName'), 'GALSync')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Automation/automationAccounts/runbooks",
+      "apiVersion": "2024-10-23",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), variables('runbookName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "description": "Syncs the Global Address List into a contact folder in each target mailbox.",
+        "runbookType": "PowerShell",
+        "runtimeEnvironment": "[variables('runtimeEnvironmentName')]",
+        "logProgress": false,
+        "logVerbose": "[parameters('verboseLogging')]",
+        "publishContentLink": {
+          "uri": "[parameters('runbookUri')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+        "[resourceId('Microsoft.Automation/automationAccounts/runtimeEnvironments/packages', parameters('automationAccountName'), variables('runtimeEnvironmentName'), 'GAL-Sync')]",
+        "[resourceId('Microsoft.Automation/automationAccounts/runtimeEnvironments', parameters('automationAccountName'), variables('runtimeEnvironmentName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Automation/automationAccounts/schedules",
+      "apiVersion": "2024-10-23",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), 'GAL-Sync')]",
+      "properties": {
+        "frequency": "[parameters('scheduleFrequency')]",
+        "interval": "[parameters('scheduleInterval')]",
+        "startTime": "[parameters('scheduleStartTime')]",
+        "timeZone": "[parameters('scheduleTimeZone')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Automation/automationAccounts/jobSchedules",
+      "apiVersion": "2024-10-23",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), guid(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), variables('runbookName'), 'GAL-Sync'))]",
+      "properties": {
+        "runbook": {
+          "name": "[variables('runbookName')]"
+        },
+        "schedule": {
+          "name": "GAL-Sync"
+        },
+        "parameters": {
+          "ConfigurationVariable": "[variables('configurationVariableName')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+        "[resourceId('Microsoft.Automation/automationAccounts/runbooks', parameters('automationAccountName'), variables('runbookName'))]",
+        "[resourceId('Microsoft.Automation/automationAccounts/schedules', parameters('automationAccountName'), 'GAL-Sync')]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('grantGraphPermissions'), equals(parameters('signInMethod'), 'ManagedIdentity'))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "galsync-graph-permissions",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "principalId": {
+            "value": "[reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2024-10-23', 'full').identity.principalId]"
+          },
+          "appRoles": {
+            "value": "[concat(createArray('User.Read.All', 'GroupMember.Read.All', 'Contacts.ReadWrite'), if(parameters('includeOrgContacts'), createArray('OrgContact.Read.All'), createArray()))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.49.2.45890",
+              "templateHash": "17499097874147609599"
+            },
+            "description": "Grants Microsoft Graph application permissions (app roles) to a managed identity."
+          },
+          "parameters": {
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Object ID of the managed identity service principal."
+              }
+            },
+            "appRoles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "metadata": {
+                "description": "Microsoft Graph application permissions to grant, for example User.Read.All."
+              }
+            }
+          },
+          "imports": {
+            "microsoftGraphV1": {
+              "provider": "MicrosoftGraph",
+              "version": "1.0.0"
+            }
+          },
+          "resources": {
+            "microsoftGraph": {
+              "existing": true,
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/servicePrincipals@v1.0",
+              "properties": {
+                "appId": "00000003-0000-0000-c000-000000000000"
+              }
+            },
+            "assignments": {
+              "copy": {
+                "name": "assignments",
+                "count": "[length(parameters('appRoles'))]"
+              },
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/appRoleAssignedTo@v1.0",
+              "properties": {
+                "principalId": "[parameters('principalId')]",
+                "resourceId": "[reference('microsoftGraph').id]",
+                "appRoleId": "[filter(reference('microsoftGraph').appRoles, lambda('appRole', equals(lambdaVariables('appRole').value, parameters('appRoles')[copyIndex()])))[0].id]"
+              },
+              "dependsOn": [
+                "microsoftGraph"
+              ]
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "managedIdentityPrincipalId": {
+      "type": "string",
+      "metadata": {
+        "description": "Object ID of the managed identity."
+      },
+      "value": "[reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2024-10-23', 'full').identity.principalId]"
+    },
+    "automationAccountName": {
+      "type": "string",
+      "value": "[parameters('automationAccountName')]"
+    },
+    "runbookName": {
+      "type": "string",
+      "value": "[variables('runbookName')]"
+    }
+  }
+}

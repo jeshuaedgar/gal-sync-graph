@@ -52,3 +52,13 @@ jobs:
           az bicep build --file deploy/main.bicep --stdout > /dev/null
           az bicep build-params --file deploy/main.bicepparam --stdout > /dev/null
           az bicep lint --file deploy/main.bicep
+
+      - name: Check deploy/azuredeploy.json is up to date
+        run: |
+          az bicep build --file deploy/main.bicep --outfile /tmp/azuredeploy.json
+          # the generator metadata changes with every Bicep version, the template itself must match
+          strip='walk(if type == "object" then del(._generator) else . end)'
+          if ! diff <(jq "$strip" deploy/azuredeploy.json) <(jq "$strip" /tmp/azuredeploy.json) > /dev/null; then
+            echo "::error file=deploy/azuredeploy.json::Out of date with deploy/main.bicep, run 'just bicep' and commit it"
+            exit 1
+          fi

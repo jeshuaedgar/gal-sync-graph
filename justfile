@@ -34,9 +34,10 @@ test-integration:
 package:
     ./scripts/build.ps1 -Task Package
 
-# build and lint the Bicep templates
+# build and lint the Bicep templates, and update deploy/azuredeploy.json for the Deploy to Azure button
 bicep:
     az bicep build --file deploy/main.bicep --outdir out
+    az bicep build --file deploy/main.bicep --outfile deploy/azuredeploy.json
     az bicep build-params --file deploy/main.bicepparam --outfile out/main.parameters.json
     az bicep lint --file deploy/main.bicep
 
