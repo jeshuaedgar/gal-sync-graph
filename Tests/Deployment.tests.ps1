@@ -32,7 +32,9 @@ Describe "Deployment" {
     }
 
     It "Should deploy the release of the module in this repository" {
-        $version = (Import-PowerShellDataFile -Path (Join-Path $PSScriptRoot "../Module/GAL-Sync.psd1")).ModuleVersion
+        $manifest = Import-PowerShellDataFile -Path (Join-Path $PSScriptRoot "../Module/GAL-Sync.psd1")
+        $version = $manifest.ModuleVersion
+        if ($manifest.PrivateData.PSData.Prerelease) { $version += "-$($manifest.PrivateData.PSData.Prerelease)" }
         $Bicep | Should -Match "param releaseVersion string = '$([regex]::Escape($version))'"
     }
 

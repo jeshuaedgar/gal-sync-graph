@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.49.2.45890",
-      "templateHash": "13627311382677157614"
+      "templateHash": "9491673980365710624"
     },
     "description": "GAL-Sync on Azure Automation: PowerShell 7.6 runtime environment, managed identity, runbook and schedule."
   },
@@ -25,7 +25,7 @@
     },
     "releaseVersion": {
       "type": "string",
-      "defaultValue": "1.0.0",
+      "defaultValue": "1.0.0-beta1",
       "metadata": {
         "description": "GAL-Sync release to deploy, for example 1.0.0 or 1.0.0-beta1. Used to build the default module and runbook URLs."
       }

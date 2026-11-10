@@ -7,7 +7,7 @@ param automationAccountName string
 param location string = resourceGroup().location
 
 @description('GAL-Sync release to deploy, for example 1.0.0 or 1.0.0-beta1. Used to build the default module and runbook URLs.')
-param releaseVersion string = '1.0.0'
+param releaseVersion string = '1.0.0-beta1'
 
 @description('Where the module is downloaded from. Ignored when modulePackageUri is set.')
 @allowed([

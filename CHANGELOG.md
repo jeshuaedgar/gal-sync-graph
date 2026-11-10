@@ -1,8 +1,16 @@
-# [v1.0.0]
+# [v1.0.0-beta1]
 
-A complete rewrite. It is not compatible with 0.x: folders created by 0.x are not reused, so remove them first or pick a new contact folder name (see [Moving from 0.x](README.md#moving-from-0x)).
+A complete rewrite, released as a beta to test before 1.0.0. It is not compatible with 0.x: folders created by 0.x are not reused, so remove them first or pick a new contact folder name (see [Moving from 0.x](README.md#moving-from-0x)).
 
 ## Added
+
+- Published to the [PowerShell Gallery](https://www.powershellgallery.com/packages/GAL-Sync): `Install-PSResource GAL-Sync -Prerelease`
+- `Start-GALSync` connects and syncs in one go, with the same settings as the settings file (`-ConfigFile`) or the Azure Automation variable (`-Settings`). `Sync-Contacts.ps1` and the runbook use it.
+- Unknown settings stop the run, so a typo does not sync with the wrong settings
+- The runbook writes the results as one JSON line to the output, and a table to the verbose stream
+- `verboseLogging` in `deploy/main.bicep` now sets the runbook's **Log verbose records** option; `Verbose` is no longer a setting
+- `moduleSource` in `deploy/main.bicep` to install the module from GitHub (default) or the PowerShell Gallery
+- `signInMethod = 'Connection'` in `deploy/main.bicep` to sign in with an app registration, for example for another tenant. The tenant, client ID and client secret or certificate name are kept in a `GAL-Sync` connection in the Automation account.
 
 - Azure Automation deployment in `deploy/main.bicep`: Automation account with a managed identity, PowerShell 7.6 runtime environment, runbook, settings and schedule. It can grant the Microsoft Graph permissions too.
 - Sign in with a managed identity, a certificate or a client secret. Tokens are renewed automatically, so long runs keep working (#17)
@@ -30,6 +38,8 @@ A complete rewrite. It is not compatible with 0.x: folders created by 0.x are no
 ## Removed
 
 - The Graph SDK option, all requests go to Microsoft Graph v1.0 directly
+- `New-StoredCredential.ps1`, the README shows the `Export-Clixml` one-liner
+- `example.bat`, the README shows how to schedule `Sync-Contacts.ps1` directly
 - Support for Windows PowerShell 5.1, PowerShell 7.6 or later is needed
 - `OrgContact.Read.All` and `Group.Read.All` are no longer needed, use `GroupMember.Read.All` (and `OrgContact.Read.All` only with `-IncludeOrgContacts`)
 
@@ -40,7 +50,7 @@ Thanks to [@jussihi](https://github.com/jussihi), [@tknaller](https://github.com
 ## Added
 
 - `Delete-ContactFolder`
-  - Courtesy of [@jussihi](https://github.com/jussihi) mentioned in #3 and #5, thanks!
+    - Courtesy of [@jussihi](https://github.com/jussihi) mentioned in #3 and #5, thanks!
 
 # [v0.1.0-beta]
 
@@ -55,9 +65,9 @@ Thanks to [@jussihi](https://github.com/jussihi), [@tknaller](https://github.com
 ## Fixed
 
 - `New-GraphRequest`
-  - Fixed a bug when there was `odata.nextLink` present it would not add to the output array
+    - Fixed a bug when there was `odata.nextLink` present it would not add to the output array
 - `Get-ContactFolder` is now language independant
-  - `wellKnownName` property seems to be filled with the default contacts folder
+    - `wellKnownName` property seems to be filled with the default contacts folder
 - `Update-FolderContact` now works properly
 - `Department` property was missing from the new contacts
 - `Sync-GALContacts`'s delta sync now works properly

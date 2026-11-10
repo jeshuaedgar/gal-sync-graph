@@ -27,6 +27,7 @@
 
     PrivateData          = @{
         PSData = @{
+            Prerelease   = "beta1"
             Tags         = @("Microsoft365", "Graph", "MicrosoftGraph", "GAL", "GlobalAddressList", "Contacts", "Sync", "Exchange", "ExchangeOnline", "EntraID", "AzureAutomation", "PSEdition_Core", "Windows", "Linux", "MacOS")
             LicenseUri   = "https://github.com/JeshuaEdgar/gal-sync-graph/blob/master/LICENSE"
             ProjectUri   = "https://github.com/JeshuaEdgar/gal-sync-graph"
