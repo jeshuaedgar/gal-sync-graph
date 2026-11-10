@@ -18,6 +18,7 @@
         "Get-GALGroupMember"
         "Invoke-GALSync"
         "Remove-GALContactFolder"
+        "Start-GALSync"
         "Sync-GALMailbox"
     )
     CmdletsToExport      = @()

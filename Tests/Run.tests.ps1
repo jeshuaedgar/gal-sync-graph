@@ -114,6 +114,64 @@ Describe "Invoke-GALSync" {
     }
 }
 
+Describe "Start-GALSync" {
+    BeforeEach {
+        Reset-FakeGraph
+        Add-Staff
+        $script:Settings = @{
+            TenantId          = "contoso.onmicrosoft.com"
+            CredentialPath    = New-CredentialFile
+            ContactFolderName = "GAL"
+            TargetMailbox     = "ann@contoso.com"
+            AllUsers          = $false
+        }
+    }
+
+    It "Should connect, sync and return the results with a settings hashtable" {
+        $results = @(Start-GALSync -Settings $Settings)
+        $results.Mailbox | Should -Be @("ann@contoso.com")
+        $results.Status | Should -Be @("Succeeded")
+    }
+
+    It "Should read the same settings from a file" {
+        $file = Join-Path $TestDrive "start.json"
+        $Settings | ConvertTo-Json | Set-Content -Path $file -Encoding utf8
+        @(Start-GALSync -ConfigFile $file).Status | Should -Be @("Succeeded")
+    }
+
+    It "Should let parameters override the settings" {
+        $results = @(Start-GALSync -Settings $Settings -TargetMailbox "bob@contoso.com")
+        $results.Mailbox | Should -Be @("bob@contoso.com")
+    }
+
+    It "Should honour WhatIf from the settings" {
+        $Settings.WhatIf = $true
+        @(Start-GALSync -Settings $Settings).Status | Should -Be @("WhatIf")
+        $Graph.Calls | Where-Object { $_ -match "^(POST|PATCH|DELETE) https://graph" } | Should -BeNullOrEmpty
+    }
+
+    It "Should return failed mailboxes instead of throwing" {
+        $Graph.AccessDenied = @("ann@contoso.com")
+        @(Start-GALSync -Settings $Settings -WarningAction SilentlyContinue).Status | Should -Be @("Failed")
+    }
+
+    It "Should refuse <Case>" -ForEach @(
+        @{ Case = "unknown settings"; Change = @{ Colour = "blue" }; Message = "*Unknown setting*Colour*" }
+        @{ Case = "a missing contact folder name"; Change = @{ ContactFolderName = "" }; Message = "*ContactFolderName*" }
+        @{ Case = "no target"; Change = @{ TargetMailbox = @() }; Message = "*exactly one*" }
+        @{ Case = "two targets"; Change = @{ AllUsers = $true }; Message = "*exactly one*" }
+        @{ Case = "a missing tenant"; Change = @{ TenantId = "" }; Message = "*TenantId*" }
+    ) {
+        foreach ($key in $Change.Keys) { $Settings[$key] = $Change[$key] }
+        { Start-GALSync -Settings $Settings } | Should -Throw $Message
+        $Graph.Calls | Should -BeNullOrEmpty
+    }
+
+    It "Should refuse -ConfigFile together with -Settings" {
+        { Start-GALSync -Settings $Settings -ConfigFile "x.json" } | Should -Throw "*not both*"
+    }
+}
+
 Describe "Azure Automation runbook" {
     BeforeEach {
         Reset-FakeGraph
@@ -133,7 +191,6 @@ Describe "Azure Automation runbook" {
             BusinessPhoneAsMobile        = $false
             ThrottleLimit                = 4
             WhatIf                       = $false
-            Verbose                      = $false
         }
         function global:Get-AutomationVariable {
             param ([string]$Name)
@@ -153,28 +210,83 @@ Describe "Azure Automation runbook" {
     }
 
     It "Should sign in with the managed identity and sync with the settings variable" {
-        $output = & $Runbook -ConfigurationVariable "GALSyncSettings" -WarningAction SilentlyContinue | Out-String
+        $output = @(& $Runbook -ConfigurationVariable "GALSyncSettings" -WarningAction SilentlyContinue 4>$null)
 
         $Graph.Calls | Where-Object { $_ -like "GET http://169.254.169.254/*" } | Should -Not -BeNullOrEmpty
-        $output | Should -Match "ann@contoso\.com\s+Succeeded"
-        $output | Should -Match "room@contoso\.com\s+Skipped"
+        $output.Count | Should -Be 1
+        $results = $output[0] | ConvertFrom-Json
+        ($results | Where-Object { $_.Mailbox -eq "ann@contoso.com" }).Status | Should -Be "Succeeded"
+        ($results | Where-Object { $_.Mailbox -eq "room@contoso.com" }).Status | Should -Be "Skipped"
         (Get-FakeContact -Mailbox "ann@contoso.com" | ForEach-Object { Get-FakeSourceId $_ }) | Should -Be @("ann")
     }
 
-    It "Should warn about unknown settings" {
+    It "Should write a readable table to the verbose stream" {
+        $verbose = & $Runbook -ConfigurationVariable "GALSyncSettings" -WarningAction SilentlyContinue 4>&1 | Where-Object { $_ -is [System.Management.Automation.VerboseRecord] }
+        ($verbose.Message -join "`n") | Should -Match "ann@contoso\.com\s+Succeeded"
+    }
+
+    It "Should stop on unknown settings" {
         $global:GALSyncTestSettings.Colour = "blue"
-        $warnings = & $Runbook -ConfigurationVariable "GALSyncSettings" 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
-        $warnings.Message | Should -Contain "Ignoring unknown setting Colour in GALSyncSettings"
+        { & $Runbook -ConfigurationVariable "GALSyncSettings" 4>$null } | Should -Throw "*Unknown setting*Colour*"
+        $Graph.Calls | Where-Object { $_ -like "*contactFolders*" } | Should -BeNullOrEmpty
+    }
+
+    Context "GALSync connection" {
+        BeforeEach {
+            $global:GALSyncTestSettings.AutomationConnection = "GAL-Sync"
+            $global:GALSyncTestConnection = @{ TenantId = "contoso.onmicrosoft.com"; ClientId = "app-id"; ClientSecret = "secret"; CertificateName = "" }
+            $rsa = [System.Security.Cryptography.RSA]::Create(2048)
+            $request = New-Object System.Security.Cryptography.X509Certificates.CertificateRequest ("CN=GAL-Sync test", $rsa, [System.Security.Cryptography.HashAlgorithmName]::SHA256, [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+            $global:GALSyncTestCertificate = $request.CreateSelfSigned([System.DateTimeOffset]::UtcNow.AddMinutes(-5), [System.DateTimeOffset]::UtcNow.AddDays(1))
+            function global:Get-AutomationConnection {
+                param ([string]$Name)
+                if ($Name -ne "GAL-Sync") { throw "Unexpected connection $Name" }
+                return $global:GALSyncTestConnection
+            }
+            function global:Get-AutomationCertificate {
+                param ([string]$Name)
+                if ($Name -ne "GAL-Sync-Cert") { throw "Unexpected certificate $Name" }
+                return $global:GALSyncTestCertificate
+            }
+        }
+
+        AfterEach {
+            Remove-Item Function:\Get-AutomationConnection, Function:\Get-AutomationCertificate
+            Remove-Variable -Name GALSyncTestConnection, GALSyncTestCertificate -Scope Global
+        }
+
+        It "Should sign in with the client secret of the connection" {
+            $output = & $Runbook -ConfigurationVariable "GALSyncSettings" -WarningAction SilentlyContinue 4>$null
+            (($output | ConvertFrom-Json) | Where-Object { $_.Mailbox -eq "ann@contoso.com" }).Status | Should -Be "Succeeded"
+            $Graph.Calls | Where-Object { $_ -like "POST https://login.microsoftonline.com/contoso.onmicrosoft.com/*" } | Should -Not -BeNullOrEmpty
+            $Graph.Calls | Where-Object { $_ -like "GET http://169.254.169.254/*" } | Should -BeNullOrEmpty
+        }
+
+        It "Should sign in with the certificate asset named in the connection" {
+            $GALSyncTestConnection.ClientSecret = ""
+            $GALSyncTestConnection.CertificateName = "GAL-Sync-Cert"
+            $output = & $Runbook -ConfigurationVariable "GALSyncSettings" -WarningAction SilentlyContinue 4>$null
+            (($output | ConvertFrom-Json) | Where-Object { $_.Mailbox -eq "ann@contoso.com" }).Status | Should -Be "Succeeded"
+            $Graph.Calls | Where-Object { $_ -like "POST https://login.microsoftonline.com/contoso.onmicrosoft.com/*" } | Should -Not -BeNullOrEmpty
+        }
+
+        It "Should explain a connection without <Missing>" -ForEach @(
+            @{ Missing = "a secret or certificate"; Change = @{ ClientSecret = "" }; Message = "*needs TenantId, ClientId and a ClientSecret or CertificateName*" }
+            @{ Missing = "a tenant"; Change = @{ TenantId = "" }; Message = "*needs TenantId, ClientId and a ClientSecret or CertificateName*" }
+        ) {
+            foreach ($key in $Change.Keys) { $GALSyncTestConnection[$key] = $Change[$key] }
+            { & $Runbook -ConfigurationVariable "GALSyncSettings" 4>$null } | Should -Throw $Message
+        }
     }
 
     It "Should fail the job when a mailbox fails" {
         $Graph.AccessDenied = @("ann@contoso.com")
-        { & $Runbook -ConfigurationVariable "GALSyncSettings" -WarningAction SilentlyContinue } | Should -Throw "*1 of 2*"
+        { & $Runbook -ConfigurationVariable "GALSyncSettings" -WarningAction SilentlyContinue 4>$null } | Should -Throw "*1 of 2*"
     }
 
     It "Should only report planned changes with -WhatIfMode" {
-        $output = & $Runbook -ConfigurationVariable "GALSyncSettings" -WhatIfMode $true -WarningAction SilentlyContinue | Out-String
-        $output | Should -Match "ann@contoso\.com\s+WhatIf"
+        $output = & $Runbook -ConfigurationVariable "GALSyncSettings" -WhatIfMode $true -WarningAction SilentlyContinue 4>$null
+        (($output | ConvertFrom-Json) | Where-Object { $_.Mailbox -eq "ann@contoso.com" }).Status | Should -Be "WhatIf"
         $Graph.Calls | Where-Object { $_ -like "GET https://graph*contactFolders*" } | Should -Not -BeNullOrEmpty
         $Graph.Calls | Where-Object { $_ -match "^(POST|PATCH|DELETE) https://graph" } | Should -BeNullOrEmpty
     }
@@ -221,12 +333,23 @@ Describe "Sync-Contacts.ps1" {
         Get-ChildItem -Path $logs -Filter "*.txt" | Should -Not -BeNullOrEmpty
     }
 
-    It "Should warn about unknown settings" {
+    It "Should stop on unknown settings" {
         @{ TenantId = "contoso.onmicrosoft.com"; CredentialPath = New-CredentialFile; ContactFolderName = "GAL"; TargetMailbox = "ann@contoso.com"; Colour = "blue" } |
         ConvertTo-Json | Set-Content -Path $ConfigFile
-        & $Script -ConfigFile $ConfigFile -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
-        $warnings.Message | Should -BeLike "*Colour*"
+        & $Script -ConfigFile $ConfigFile -ErrorVariable errors -ErrorAction SilentlyContinue 2>$null | Out-Null
+        ($errors | Out-String) | Should -BeLike "*Colour*"
+        $LASTEXITCODE | Should -Be 1
+        $Graph.Calls | Where-Object { $_ -like "*contactFolders*" } | Should -BeNullOrEmpty
+    }
+
+    It "Should read the log folder from the settings file" {
+        $logs = Join-Path $TestDrive "file-logs"
+        $settings = Get-Content $ConfigFile -Raw | ConvertFrom-Json -AsHashtable
+        $settings.LogPath = $logs
+        $settings | ConvertTo-Json | Set-Content -Path $ConfigFile
+        & $Script -ConfigFile $ConfigFile | Out-Null
         $LASTEXITCODE | Should -Be 0
+        Get-ChildItem -Path $logs -Filter "*.txt" | Should -Not -BeNullOrEmpty
     }
 
     It "Should exit with 1 when <Case>" -ForEach @(

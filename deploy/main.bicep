@@ -6,17 +6,44 @@ param automationAccountName string
 @description('Location of the Automation account.')
 param location string = resourceGroup().location
 
-@description('GAL-Sync release to deploy. Used to build the default module and runbook URLs.')
+@description('GAL-Sync release to deploy, for example 1.0.0 or 1.0.0-beta1. Used to build the default module and runbook URLs.')
 param releaseVersion string = '1.0.0'
 
-@description('URL of GAL-Sync.zip (a zip with a GAL-Sync folder inside). Defaults to the GitHub release asset.')
-param modulePackageUri string = 'https://github.com/JeshuaEdgar/gal-sync-graph/releases/download/v${releaseVersion}/GAL-Sync.zip'
+@description('Where the module is downloaded from. Ignored when modulePackageUri is set.')
+@allowed([
+  'GitHub'
+  'PSGallery'
+])
+param moduleSource string = 'GitHub'
+
+@description('Optional URL of your own module package: a zip with a GAL-Sync folder inside, or a .nupkg. Overrides moduleSource.')
+param modulePackageUri string = ''
 
 @description('URL of the runbook script. Defaults to the GitHub release asset.')
 param runbookUri string = 'https://github.com/JeshuaEdgar/gal-sync-graph/releases/download/v${releaseVersion}/GAL-Sync-Runbook.ps1'
 
 @description('Name of the contact folder created in each mailbox.')
 param contactFolderName string = 'Global Address List'
+
+@description('How the runbook signs in to Microsoft Graph. ManagedIdentity only works for the tenant of the Automation account. Connection uses an app registration, for example for another tenant, stored in a GALSync connection asset.')
+@allowed([
+  'ManagedIdentity'
+  'Connection'
+])
+param signInMethod string = 'ManagedIdentity'
+
+@description('Connection: tenant ID or contoso.onmicrosoft.com of the tenant to sync.')
+param tenantId string = ''
+
+@description('Connection: application (client) ID of the app registration.')
+param clientId string = ''
+
+@description('Connection: client secret of the app registration. Leave empty when you use a certificate.')
+@secure()
+param clientSecret string = ''
+
+@description('Connection: name of a certificate asset (.pfx with private key) in the Automation account. Upload it under Certificates, it is used instead of the client secret.')
+param certificateName string = ''
 
 @description('Which mailboxes receive the contacts.')
 @allowed([
@@ -63,10 +90,10 @@ param throttleLimit int = 4
 @description('Report planned changes without writing to mailboxes.')
 param reportOnly bool = false
 
-@description('Write verbose output to the job log.')
+@description('Log verbose records of the runbook: a table of the results and details per mailbox. Can also be switched under Logging and tracing of the runbook.')
 param verboseLogging bool = false
 
-@description('Grant the Microsoft Graph permissions to the managed identity in this deployment. Needs Privileged Role Administrator (or Global Administrator).')
+@description('Grant the Microsoft Graph permissions to the managed identity in this deployment. Needs Privileged Role Administrator (or Global Administrator). Only used with ManagedIdentity.')
 param grantGraphPermissions bool = true
 
 @description('How often the sync runs.')
@@ -91,7 +118,18 @@ var runtimeEnvironmentName = 'GALSync-PowerShell-7-6'
 var runbookName = 'GAL-Sync'
 var configurationVariableName = 'GALSyncConfig'
 
+var moduleUri = !empty(modulePackageUri)
+  ? modulePackageUri
+  : moduleSource == 'PSGallery'
+      ? 'https://www.powershellgallery.com/api/v2/package/GAL-Sync/${releaseVersion}'
+      : 'https://github.com/JeshuaEdgar/gal-sync-graph/releases/download/v${releaseVersion}/GAL-Sync.zip'
+
+var connectionName = 'GAL-Sync'
+
+var signInConfiguration = signInMethod == 'Connection' ? { AutomationConnection: connectionName } : {}
+
 var configuration = union(
+  signInConfiguration,
   targetMode == 'AllUsers' ? { AllUsers: true } : targetMode == 'Group' ? { TargetGroup: targetGroup } : { TargetMailbox: targetMailboxes },
   empty(sourceGroup) ? {} : { SourceGroup: sourceGroup },
   empty(excludeUsers) ? {} : { ExcludeUser: excludeUsers },
@@ -107,7 +145,6 @@ var configuration = union(
     BusinessPhoneAsMobile: businessPhoneAsMobile
     ThrottleLimit: throttleLimit
     WhatIf: reportOnly
-    Verbose: verboseLogging
   }
 )
 
@@ -150,7 +187,7 @@ resource modulePackage 'Microsoft.Automation/automationAccounts/runtimeEnvironme
   name: 'GAL-Sync'
   properties: {
     contentLink: {
-      uri: modulePackageUri
+      uri: moduleUri
     }
   }
 }
@@ -165,6 +202,53 @@ resource configurationVariable 'Microsoft.Automation/automationAccounts/variable
   }
 }
 
+resource connectionType 'Microsoft.Automation/automationAccounts/connectionTypes@2024-10-23' = if (signInMethod == 'Connection') {
+  parent: automationAccount
+  name: 'GALSync'
+  properties: {
+    isGlobal: false
+    fieldDefinitions: {
+      TenantId: {
+        isEncrypted: false
+        isOptional: false
+        type: 'System.String'
+      }
+      ClientId: {
+        isEncrypted: false
+        isOptional: false
+        type: 'System.String'
+      }
+      ClientSecret: {
+        isEncrypted: true
+        isOptional: true
+        type: 'System.String'
+      }
+      CertificateName: {
+        isEncrypted: false
+        isOptional: true
+        type: 'System.String'
+      }
+    }
+  }
+}
+
+resource connection 'Microsoft.Automation/automationAccounts/connections@2024-10-23' = if (signInMethod == 'Connection') {
+  parent: automationAccount
+  name: connectionName
+  properties: {
+    description: 'App registration GAL-Sync signs in with. Fill in ClientSecret or CertificateName.'
+    connectionType: {
+      name: connectionType.name
+    }
+    fieldDefinitionValues: {
+      TenantId: tenantId
+      ClientId: clientId
+      ClientSecret: clientSecret
+      CertificateName: certificateName
+    }
+  }
+}
+
 resource runbook 'Microsoft.Automation/automationAccounts/runbooks@2024-10-23' = {
   parent: automationAccount
   name: runbookName
@@ -175,7 +259,7 @@ resource runbook 'Microsoft.Automation/automationAccounts/runbooks@2024-10-23' =
     runbookType: 'PowerShell'
     runtimeEnvironment: runtimeEnvironment.name
     logProgress: false
-    logVerbose: true
+    logVerbose: verboseLogging
     publishContentLink: {
       uri: runbookUri
     }
@@ -212,7 +296,7 @@ resource jobSchedule 'Microsoft.Automation/automationAccounts/jobSchedules@2024-
   }
 }
 
-module graphPermissions 'modules/graph-app-roles.bicep' = if (grantGraphPermissions) {
+module graphPermissions 'modules/graph-app-roles.bicep' = if (grantGraphPermissions && signInMethod == 'ManagedIdentity') {
   name: 'galsync-graph-permissions'
   params: {
     principalId: automationAccount.identity.principalId

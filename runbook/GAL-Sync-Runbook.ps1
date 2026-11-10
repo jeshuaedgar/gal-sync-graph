@@ -1,36 +1,42 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSAvoidUsingConvertToSecureStringWithPlainText", "", Justification = "Get-AutomationConnection returns encrypted connection fields as plain strings.")]
 param (
     [string]$ConfigurationVariable = "GALSyncConfig",
     [bool]$WhatIfMode = $false
 )
 
 $ErrorActionPreference = "Stop"
-$ProgressPreference = "SilentlyContinue"
+# Azure Automation keeps verbose records only when "Log verbose records" is on for the runbook
+$VerbosePreference = "Continue"
 
 $settings = Get-AutomationVariable -Name $ConfigurationVariable | ConvertFrom-Json -AsHashtable
-if ($WhatIfMode) {
-    $settings.WhatIf = $true
+$settings.WhatIf = $settings.WhatIf -or $WhatIfMode
+
+# sign in with the managed identity, or with the app registration in the GALSync connection that AutomationConnection names
+$signIn = @{ ManagedIdentity = $true }
+
+if ($name = $settings.AutomationConnection) {
+    $settings.Remove("AutomationConnection")
+    $c = Get-AutomationConnection -Name $name
+    if (-not ($c.TenantId -and $c.ClientId -and ($c.ClientSecret -or $c.CertificateName))) {
+        throw "Connection $name needs TenantId, ClientId and a ClientSecret or CertificateName"
+    }
+    $signIn = @{ TenantId = $c.TenantId }
+    if ($c.CertificateName) {
+        $signIn.ClientId = $c.ClientId
+        $signIn.Certificate = Get-AutomationCertificate -Name $c.CertificateName
+    }
+    else {
+        $signIn.Credential = [pscredential]::new($c.ClientId, (ConvertTo-SecureString $c.ClientSecret -AsPlainText -Force))
+    }
 }
 
-Import-Module -Name GAL-Sync
-$connectParameters = (Get-Command Connect-GALSync).Parameters.Keys
-$syncParameters = (Get-Command Invoke-GALSync).Parameters.Keys
-$connect = @{ ManagedIdentity = $true }
-$sync = @{}
-foreach ($key in $settings.Keys) {
-    # a switch that is turned off would still select a parameter set
-    if ($settings[$key] -is [bool] -and -not $settings[$key]) { continue }
-    if ($key -in $syncParameters) { $sync[$key] = $settings[$key] }
-    elseif ($key -in $connectParameters) { $connect[$key] = $settings[$key] }
-    else { Write-Warning "Ignoring unknown setting $key in $ConfigurationVariable" }
-}
+$results = @(Start-GALSync -Settings $settings @signIn)
 
-$connection = Connect-GALSync @connect
-Write-Output "Connected to tenant $($connection.TenantId) as $($connection.ClientId)"
+# a table for people in the verbose stream, one JSON line for scripts in the output
+Write-Verbose ($results | Format-Table -AutoSize | Out-String -Width 200)
+ConvertTo-Json -InputObject $results -Compress -Depth 2
 
-$results = @(Invoke-GALSync @sync)
-$results | Format-Table -AutoSize | Out-String -Width 200 | Write-Output
-
-$failed = @($results | Where-Object { $_.Status -eq "Failed" })
+$failed = @($results | Where-Object Status -eq "Failed")
 if ($failed) {
     throw "$($failed.Count) of $($results.Count) mailbox(es) failed to sync"
 }
