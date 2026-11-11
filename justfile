@@ -30,7 +30,7 @@ test:
 test-integration:
     ./scripts/build.ps1 -Task Test -Integration
 
-# manual check of the retry and throttling handling with Dev Proxy (see Tests/DevProxy/README.md)
+# manual check of the retry and throttling handling with Dev Proxy (see TESTING.md)
 devproxy:
     ./Tests/DevProxy/Invoke-DevProxyScenario.ps1
 
