@@ -32,13 +32,32 @@ Describe "Invoke-GALSync" {
     }
 
     It "Should sync every target mailbox in parallel and report each one" {
-        $Graph.Unlicensed = @("room@contoso.com")
-        $results = @(Invoke-GALSync -ContactFolderName "GAL" -TargetMailbox "ann@contoso.com", "bob@contoso.com", "scanner@contoso.com", "room@contoso.com" -ThrottleLimit 3)
+        $results = @(Invoke-GALSync -ContactFolderName "GAL" -TargetMailbox "ann@contoso.com", "bob@contoso.com", "scanner@contoso.com" -ThrottleLimit 3)
 
-        $results.Count | Should -Be 4
-        ($results | Where-Object { $_.Mailbox -eq "room@contoso.com" }).Status | Should -Be "Skipped"
-        ($results | Where-Object { $_.Status -eq "Succeeded" }).Created | Should -Be @(3, 3, 3)
+        $results.Count | Should -Be 3
+        $results.Status | Should -Be @("Succeeded", "Succeeded", "Succeeded")
+        $results.Created | Should -Be @(3, 3, 3)
         (Get-FakeContact -Mailbox "bob@contoso.com" | ForEach-Object { Get-FakeSourceId $_ }) | Sort-Object | Should -Be @("ann", "bob", "svc")
+    }
+
+    It "Should report an explicit mailbox that is unavailable as failed, so typos are noticed" {
+        $Graph.Unlicensed = @("room@contoso.com")
+        $results = @(Invoke-GALSync -ContactFolderName "GAL" -TargetMailbox "ann@contoso.com", "room@contoso.com", "typo@contoso.com" -WarningAction SilentlyContinue)
+
+        ($results | Where-Object { $_.Mailbox -eq "ann@contoso.com" }).Status | Should -Be "Succeeded"
+        ($results | Where-Object { $_.Mailbox -eq "room@contoso.com" }).Status | Should -Be "Failed"
+        ($results | Where-Object { $_.Mailbox -eq "typo@contoso.com" }).Status | Should -Be "Failed"
+    }
+
+    It "Should skip mailboxes without Exchange Online when targeting <Mode>" -ForEach @(
+        @{ Mode = "all users"; Parameters = @{ AllUsers = $true } }
+        @{ Mode = "a group"; Parameters = @{ TargetGroup = "GAL users" } }
+    ) {
+        $Graph.Unlicensed = @("scanner@contoso.com")
+        $results = @(Invoke-GALSync -ContactFolderName "GAL" @Parameters)
+
+        ($results | Where-Object { $_.Mailbox -eq "scanner@contoso.com" }).Status | Should -Be "Skipped"
+        ($results | Where-Object { $_.Mailbox -ne "scanner@contoso.com" }).Status | Should -Be @("Succeeded", "Succeeded")
     }
 
     It "Should accept comma-separated mailboxes and exclusions" {
@@ -179,7 +198,7 @@ Describe "Azure Automation runbook" {
         # shaped like the GALSyncConfig variable that deploy/main.bicep creates
         $global:GALSyncTestSettings = @{
             AllUsers                     = $false
-            TargetMailbox                = "ann@contoso.com,room@contoso.com"
+            TargetMailbox                = "ann@contoso.com"
             ExcludeUser                  = "bob@contoso.com,svc"
             ContactFolderName            = "GAL"
             IncludeUsersWithoutPhone     = $false
@@ -200,7 +219,6 @@ Describe "Azure Automation runbook" {
         $script:ModulePath = $env:PSModulePath
         $env:PSModulePath = "{0}{1}{2}" -f (Join-Path $Graph.Root "modules"), [System.IO.Path]::PathSeparator, $env:PSModulePath
         $script:Runbook = Join-Path $Graph.Root "runbook/GAL-Sync-Runbook.ps1"
-        $Graph.Unlicensed = @("room@contoso.com")
     }
 
     AfterEach {
@@ -216,7 +234,6 @@ Describe "Azure Automation runbook" {
         $output.Count | Should -Be 1
         $results = $output[0] | ConvertFrom-Json
         ($results | Where-Object { $_.Mailbox -eq "ann@contoso.com" }).Status | Should -Be "Succeeded"
-        ($results | Where-Object { $_.Mailbox -eq "room@contoso.com" }).Status | Should -Be "Skipped"
         (Get-FakeContact -Mailbox "ann@contoso.com" | ForEach-Object { Get-FakeSourceId $_ }) | Should -Be @("ann")
     }
 
@@ -229,6 +246,39 @@ Describe "Azure Automation runbook" {
         $global:GALSyncTestSettings.Colour = "blue"
         { & $Runbook -ConfigurationVariable "GALSyncSettings" 4>$null } | Should -Throw "*Unknown setting*Colour*"
         $Graph.Calls | Where-Object { $_ -like "*contactFolders*" } | Should -BeNullOrEmpty
+    }
+
+    Context "Diagnostic mode" {
+        It "Should print the diagnostics instead of syncing" {
+            $output = @(& $Runbook -ConfigurationVariable "GALSyncSettings" -Diagnostic $true -WarningAction SilentlyContinue 4>$null)
+
+            $output.Count | Should -Be 1
+            $output[0] | Should -BeOfType [string]
+            $output[0] | Should -BeLike "*Sign-in method: ManagedIdentity*"
+            $Graph.Calls | Where-Object { $_ -like "*contactFolders*" } | Should -BeNullOrEmpty
+            Get-FakeContact -Mailbox "ann@contoso.com" | Should -BeNullOrEmpty
+        }
+
+        It "Should check the mailbox without printing the address" {
+            $output = (& $Runbook -ConfigurationVariable "GALSyncSettings" -Diagnostic $true -DiagnosticMailbox "ann@contoso.com" -WarningAction SilentlyContinue 4>$null) -join "`n"
+
+            $output | Should -BeLike "*Mailbox check*Read access: OK*"
+            $output | Should -Not -BeLike "*ann@contoso.com*"
+        }
+
+        It "Should report a connection that cannot be read instead of failing" {
+            $global:GALSyncTestSettings.AutomationConnection = "Missing"
+            function global:Get-AutomationConnection { throw "Connection Missing not found for ann@contoso.com" }
+            try {
+                $output = (& $Runbook -ConfigurationVariable "GALSyncSettings" -Diagnostic $true -WarningAction SilentlyContinue 4>$null) -join "`n"
+            }
+            finally {
+                Remove-Item Function:\Get-AutomationConnection
+            }
+
+            $output | Should -BeLike "*#### Problem*Reading the settings or the connection failed*not found*"
+            $output | Should -Not -BeLike "*ann@contoso.com*"
+        }
     }
 
     Context "GALSync connection" {
@@ -281,7 +331,7 @@ Describe "Azure Automation runbook" {
 
     It "Should fail the job when a mailbox fails" {
         $Graph.AccessDenied = @("ann@contoso.com")
-        { & $Runbook -ConfigurationVariable "GALSyncSettings" -WarningAction SilentlyContinue 4>$null } | Should -Throw "*1 of 2*"
+        { & $Runbook -ConfigurationVariable "GALSyncSettings" -WarningAction SilentlyContinue 4>$null } | Should -Throw "*1 of 1*"
     }
 
     It "Should only report planned changes with -WhatIfMode" {

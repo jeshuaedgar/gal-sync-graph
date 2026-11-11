@@ -4,6 +4,10 @@ A complete rewrite, released as a beta to test before 1.0.0. It is not compatibl
 
 ## Added
 
+- `Get-GALDiagnostic` prints support information that is safe to paste into an issue: versions, sign-in method, token roles, an optional read-only mailbox check and a summary of sync results, without secrets, IDs or email addresses
+- Issue form for beta feedback
+- The runbook has a `Diagnostic` mode (and `DiagnosticMailbox`) that prints `Get-GALDiagnostic` to the job output instead of syncing, also when signing in fails
+
 - Published to the [PowerShell Gallery](https://www.powershellgallery.com/packages/GAL-Sync): `Install-PSResource GAL-Sync -Prerelease`
 - `Start-GALSync` connects and syncs in one go, with the same settings as the settings file (`-ConfigFile`) or the Azure Automation variable (`-Settings`). `Sync-Contacts.ps1` and the runbook use it.
 - Unknown settings stop the run, so a typo does not sync with the wrong settings
@@ -24,6 +28,15 @@ A complete rewrite, released as a beta to test before 1.0.0. It is not compatibl
 - Company, office and business address are synced (#9)
 - `-ConfigFile` for `Sync-Contacts.ps1`, so settings with accented characters do not have to go through a .bat file (#9)
 - Tests that run against a fake Microsoft Graph, so no tenant is needed
+- `grantContactsAccess` in `deploy/main.bicep`: turn it off to scope mailbox access with Exchange RBAC for Applications instead of `Contacts.ReadWrite` in Entra (see the README)
+
+## Changed
+
+- A mailbox named with `TargetMailbox` that does not exist or has no Exchange Online mailbox is reported as `Failed` instead of `Skipped`, so typos are noticed. `AllUsers` and `TargetGroup` still skip them. `Sync-GALMailbox` has a `-FailWhenUnavailable` switch for this.
+- `deploy/main.bicep` only grants `GroupMember.Read.All` when a target or source group is used
+- `-SourceGroup` reads the group's members directly instead of through the eventually consistent search index
+- `showInAddressList` is only requested from Graph with `-ExcludeHiddenFromAddressList`, because the documentation advises against relying on it
+- An access denied error on a mailbox now says to check `Contacts.ReadWrite` (Entra or Exchange RBAC) and the scope of the mailbox
 
 ## Fixed
 

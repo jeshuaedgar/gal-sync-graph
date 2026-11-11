@@ -120,9 +120,49 @@ The same names work in the settings file, the `GALSyncConfig` variable and `Star
 Microsoft Graph application permissions:
 
 - `User.Read.All`: list users
-- `GroupMember.Read.All`: list groups and their members
+- `GroupMember.Read.All`: list groups and their members (only with `TargetGroup` or `SourceGroup`)
 - `Contacts.ReadWrite`: manage the contact folder and contacts
 - `OrgContact.Read.All`: list mail contacts (only with `IncludeOrgContacts`)
+
+The Bicep deployment only grants the roles the settings need. `TargetGroup` reads its members through an index that can lag a few minutes behind recent group changes. `SourceGroup` reads them directly.
+
+A mailbox in `TargetMailbox` that does not exist or has no Exchange Online mailbox is reported as `Failed`, so typos are noticed. With `AllUsers` or `TargetGroup` those mailboxes are `Skipped`, because directory users without a mailbox are expected.
+
+### Limit access to some mailboxes
+
+`Contacts.ReadWrite` granted in Entra covers every mailbox in the tenant. To limit the app to a set of mailboxes, use [Role Based Access Control for Applications](https://learn.microsoft.com/exchange/permissions-exo/application-rbac) in Exchange Online instead:
+
+1. Deploy with `grantContactsAccess = false` (or do not consent to `Contacts.ReadWrite`). Remove the Entra grant if it exists, because Entra and Exchange grants add up.
+2. Connect to Exchange Online PowerShell and register the app, tag the mailboxes and assign the role to a scope:
+
+```powershell
+New-ServicePrincipal -AppId <app id> -ObjectId <service principal object id> -DisplayName "GAL-Sync"
+New-ManagementScope -Name "GAL-Sync mailboxes" -RecipientRestrictionFilter "CustomAttribute1 -eq 'GALSync'"
+New-ManagementRoleAssignment -App <service principal object id> -Role "Application Contacts.ReadWrite" -CustomResourceScope "GAL-Sync mailboxes"
+Test-ServicePrincipalAuthorization -Identity <service principal object id> -Resource <mailbox>
+```
+
+Changes can take 30 minutes to 2 hours to apply. A mailbox outside the scope answers 403 and is reported as `Failed` with a hint about the permission, so keep the targets inside the scope.
+
+## Trying the beta
+
+Start small, and check what would change before anything is written:
+
+1. Run with `-TargetMailbox` for your own mailbox, or a small test group. Do not start with the whole tenant.
+2. Add `-WhatIf` first. It reports the planned changes and writes nothing.
+3. To undo, run `Remove-GALContactFolder -Mailbox <address> -Name <folder>`. It only removes folders that GAL-Sync created.
+
+To report a problem or share how it went, open an [issue](https://github.com/JeshuaEdgar/gal-sync-graph/issues/new/choose) and paste the output of `Get-GALDiagnostic`.
+
+**In Azure Automation**, start the `GAL-Sync` runbook with `Diagnostic` set to true, and optionally `DiagnosticMailbox` set to a mailbox that fails. It signs in the same way as the sync, writes nothing, and puts the diagnostics in the job **Output**. If reading the settings or signing in fails, the reason is part of the output instead of a failed job. Copy the output into the issue.
+
+**From PowerShell**:
+
+```powershell
+Get-GALDiagnostic -Mailbox adele@contoso.com -Result $results | Set-Clipboard
+```
+
+It shows the versions, how you are signed in, the roles in the token, whether the mailbox can be read, and a summary of the results. It leaves out secrets, tokens, tenant and application IDs, names and email addresses, and filters text from Graph for them. It is best effort, so read it before you post. On Linux, `Set-Clipboard` needs `xclip` or `wl-clipboard`; otherwise drop it and copy the output.
 
 ## Moving from 0.x
 
@@ -149,7 +189,7 @@ Install-PSResource PSScriptAnalyzer -Version 1.25.0
 ./scripts/build.ps1   # -Task Format to fix formatting
 ```
 
-Tests run against a fake Microsoft Graph. For a real tenant, set `GALSYNC_TENANT_ID`, `GALSYNC_CLIENT_ID`, `GALSYNC_CLIENT_SECRET` and `GALSYNC_TEST_MAILBOX` and run `./scripts/build.ps1 -Task Test -Integration`.
+Tests run against a fake Microsoft Graph. For a real tenant, set `GALSYNC_TENANT_ID`, `GALSYNC_CLIENT_ID`, `GALSYNC_CLIENT_SECRET` and `GALSYNC_TEST_MAILBOX` and run `./scripts/build.ps1 -Task Test -Integration`. See [TESTING.md](TESTING.md) for the unit tests, the integration tests and the manual Dev Proxy check.
 
 ## Credits
 

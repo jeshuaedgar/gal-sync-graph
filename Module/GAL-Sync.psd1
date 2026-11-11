@@ -14,6 +14,7 @@
         "Disconnect-GALSync"
         "Get-GALContactFolder"
         "Get-GALDirectoryUser"
+        "Get-GALDiagnostic"
         "Get-GALFolderContact"
         "Get-GALGroupMember"
         "Invoke-GALSync"
