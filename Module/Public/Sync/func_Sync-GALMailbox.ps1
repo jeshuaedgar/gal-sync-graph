@@ -3,7 +3,9 @@ function Sync-GALMailbox {
     param (
         [parameter(Mandatory)][string]$Mailbox,
         [parameter(Mandatory)][string]$ContactFolderName,
-        [parameter(Mandatory)][AllowEmptyCollection()][object[]]$DirectoryUser
+        [parameter(Mandatory)][AllowEmptyCollection()][object[]]$DirectoryUser,
+        # report unavailable mailboxes as Failed instead of Skipped, used for explicitly requested mailboxes
+        [switch]$FailWhenUnavailable
     )
     # mailboxes without Exchange Online (no licence, deleted, not a user mailbox) can not be synced
     $skipCodes = "MailboxNotEnabledForRESTAPI", "MailboxNotSupportedForRESTAPI", "ErrorNonExistentMailbox", "ErrorInvalidUser", "ResourceNotFound"
@@ -104,7 +106,11 @@ function Sync-GALMailbox {
     }
     catch {
         $result.Message = $_.Exception.Message
-        if ($_.Exception.Data["GraphErrorCode"] -in $skipCodes) {
+        $errorCode = $_.Exception.Data["GraphErrorCode"]
+        if ($errorCode -eq "ErrorAccessDenied") {
+            $result.Message += " (check that the app has Contacts.ReadWrite, granted in Entra or through Exchange RBAC for Applications, and that the mailbox is in scope)"
+        }
+        if ($errorCode -in $skipCodes -and -not $FailWhenUnavailable) {
             $result.Status = "Skipped"
             Write-VerboseEvent "Skipped $($Mailbox): $($result.Message)"
         }

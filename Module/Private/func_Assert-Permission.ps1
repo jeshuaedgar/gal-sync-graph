@@ -17,4 +17,8 @@ function Assert-Permission {
     if ($missing) {
         throw "Missing the $($missing -join ", ") role(s), please update your application and rerun the script"
     }
+    # not a hard requirement: Exchange RBAC for Applications can grant mailbox access without an Entra role
+    if ($roles -notcontains "Contacts.ReadWrite") {
+        Write-VerboseEvent "The token has no Contacts.ReadWrite role, assuming mailbox access is granted through Exchange RBAC for Applications"
+    }
 }

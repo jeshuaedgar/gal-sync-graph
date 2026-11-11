@@ -12,8 +12,13 @@ function Get-GALDirectoryUser {
         [switch]$IncludeDisabledUsers,
         [switch]$IncludeGuests
     )
-    $userEndpoint = "/users?`$select=id,displayName,givenName,surname,jobTitle,department,companyName,officeLocation,mail,userPrincipalName,businessPhones,mobilePhone,streetAddress,city,state,postalCode,country,accountEnabled,userType,showInAddressList&`$top=999"
+    $userEndpoint = "/users?`$select=id,displayName,givenName,surname,jobTitle,department,companyName,officeLocation,mail,userPrincipalName,businessPhones,mobilePhone,streetAddress,city,state,postalCode,country,accountEnabled,userType&`$top=999"
     $userHeaders = @{}
+    if ($ExcludeHiddenFromAddressList) {
+        # the docs advise against showInAddressList because it can be out of sync with Exchange, so only ask for it when requested
+        $userEndpoint = $userEndpoint.Replace(",userType&", ",userType,showInAddressList&")
+        Write-VerboseEvent "Using showInAddressList to hide users, this property can be out of sync with Exchange"
+    }
     if ($UserFilter) {
         $userEndpoint += "&`$count=true&`$filter=$([System.Uri]::EscapeDataString($UserFilter))"
         $userHeaders.ConsistencyLevel = "eventual"
@@ -82,8 +87,8 @@ function Get-GALDirectoryUser {
     $groupMembers = @{}
     if ($SourceGroup) {
         $groupId = Get-GroupId -Group $SourceGroup
-        # listing transitiveMembers with $select is an advanced query, which needs ConsistencyLevel and $count
-        New-GraphRequest -Endpoint "/groups/$($groupId)/transitiveMembers?`$count=true&`$top=999&`$select=id" -Headers @{ ConsistencyLevel = "eventual" } -All | ForEach-Object {
+        # a plain request reads the directory directly, advanced queries ($count, $select) use an eventually consistent index
+        New-GraphRequest -Endpoint "/groups/$($groupId)/transitiveMembers" -All | ForEach-Object {
             $groupMembers[$_.id] = $true
         }
     }

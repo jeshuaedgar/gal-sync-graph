@@ -46,9 +46,11 @@ function Invoke-GALSync {
     Write-VerboseEvent "Syncing $($directoryUsers.Count) contacts to $($mailboxes.Count) mailbox(es), $ThrottleLimit at a time"
 
     $syncSplat = @{
-        ContactFolderName = $ContactFolderName
-        DirectoryUser     = $directoryUsers
-        WhatIf            = [bool]$WhatIfPreference
+        ContactFolderName   = $ContactFolderName
+        DirectoryUser       = $directoryUsers
+        WhatIf              = [bool]$WhatIfPreference
+        # a mailbox that was named explicitly and is unavailable is most likely a typo
+        FailWhenUnavailable = ($PSCmdlet.ParameterSetName -eq "TargetMailbox")
     }
     $manifest = Join-Path -Path $MyInvocation.MyCommand.Module.ModuleBase -ChildPath "GAL-Sync.psd1"
     $session = $script:galSyncData

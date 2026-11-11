@@ -282,6 +282,14 @@ Describe "Sync-GALMailbox" {
             $result = Sync-Adele
             $result.Status | Should -Be "Failed"
             $result.Message | Should -BeLike "*ErrorAccessDenied*"
+            $result.Message | Should -BeLike "*Contacts.ReadWrite*Exchange RBAC for Applications*"
+        }
+
+        It "Should fail an unavailable mailbox with -FailWhenUnavailable" {
+            $Graph.Unlicensed = @("adele@contoso.com")
+            $result = Sync-Adele -Options @{ FailWhenUnavailable = $true }
+            $result.Status | Should -Be "Failed"
+            $result.Message | Should -BeLike "*MailboxNotEnabledForRESTAPI*"
         }
 
         It "Should report contacts that could not be <Action>" -ForEach @(

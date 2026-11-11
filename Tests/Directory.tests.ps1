@@ -70,6 +70,13 @@ Describe "Get-GALDirectoryUser" {
         (Get-GALDirectoryUser -ExcludeHiddenFromAddressList).id | Should -Be @("ann", "biz", "shown")
     }
 
+    It "Should only select showInAddressList when hidden users are left out" {
+        Get-GALDirectoryUser | Out-Null
+        $Graph.UserQueries[-1].Query['$select'] | Should -Not -BeLike "*showInAddressList*"
+        Get-GALDirectoryUser -ExcludeHiddenFromAddressList | Out-Null
+        $Graph.UserQueries[-1].Query['$select'] | Should -BeLike "*showInAddressList*"
+    }
+
     It "Should show a business number as the mobile number when asked" {
         Add-FakeUser -Id "desk" -Name "Desk Phone" -Mobile "" -Business "+31 20 5", "+31 20 6" | Out-Null
         $desk = Get-GALDirectoryUser -BusinessPhoneAsMobile | Where-Object { $_.id -eq "desk" }

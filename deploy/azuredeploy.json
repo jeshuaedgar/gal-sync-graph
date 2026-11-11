@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.49.2.45890",
-      "templateHash": "9491673980365710624"
+      "templateHash": "633070467153473112"
     },
     "description": "GAL-Sync on Azure Automation: PowerShell 7.6 runtime environment, managed identity, runbook and schedule."
   },
@@ -213,6 +213,13 @@
       "defaultValue": true,
       "metadata": {
         "description": "Grant the Microsoft Graph permissions to the managed identity in this deployment. Needs Privileged Role Administrator (or Global Administrator). Only used with ManagedIdentity."
+      }
+    },
+    "grantContactsAccess": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Grant Contacts.ReadWrite in Entra, which covers every mailbox. Turn off to scope mailbox access with Exchange RBAC for Applications instead. Only used when grantGraphPermissions is true."
       }
     },
     "scheduleFrequency": {
@@ -449,7 +456,7 @@
             "value": "[reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2024-10-23', 'full').identity.principalId]"
           },
           "appRoles": {
-            "value": "[concat(createArray('User.Read.All', 'GroupMember.Read.All', 'Contacts.ReadWrite'), if(parameters('includeOrgContacts'), createArray('OrgContact.Read.All'), createArray()))]"
+            "value": "[concat(createArray('User.Read.All'), if(parameters('grantContactsAccess'), createArray('Contacts.ReadWrite'), createArray()), if(or(equals(parameters('targetMode'), 'Group'), not(empty(parameters('sourceGroup')))), createArray('GroupMember.Read.All'), createArray()), if(parameters('includeOrgContacts'), createArray('OrgContact.Read.All'), createArray()))]"
           }
         },
         "template": {

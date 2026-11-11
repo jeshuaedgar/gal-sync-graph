@@ -96,6 +96,9 @@ param verboseLogging bool = false
 @description('Grant the Microsoft Graph permissions to the managed identity in this deployment. Needs Privileged Role Administrator (or Global Administrator). Only used with ManagedIdentity.')
 param grantGraphPermissions bool = true
 
+@description('Grant Contacts.ReadWrite in Entra, which covers every mailbox. Turn off to scope mailbox access with Exchange RBAC for Applications instead. Only used when grantGraphPermissions is true.')
+param grantContactsAccess bool = true
+
 @description('How often the sync runs.')
 @allowed([
   'Hour'
@@ -300,13 +303,12 @@ module graphPermissions 'modules/graph-app-roles.bicep' = if (grantGraphPermissi
   name: 'galsync-graph-permissions'
   params: {
     principalId: automationAccount.identity.principalId
-    appRoles: concat([
-      'User.Read.All'
-      'GroupMember.Read.All'
-      'Contacts.ReadWrite'
-    ], includeOrgContacts ? [
-      'OrgContact.Read.All'
-    ] : [])
+    appRoles: concat(
+      ['User.Read.All'],
+      grantContactsAccess ? ['Contacts.ReadWrite'] : [],
+      targetMode == 'Group' || !empty(sourceGroup) ? ['GroupMember.Read.All'] : [],
+      includeOrgContacts ? ['OrgContact.Read.All'] : []
+    )
   }
 }
 
