@@ -11,8 +11,6 @@ trim_trailing_whitespace = true
 [*.{bicep,bicepparam,yml,yaml}]
 indent_size = 2
 
-[*.bat]
-end_of_line = crlf
 
 [*.md]
 trim_trailing_whitespace = false
