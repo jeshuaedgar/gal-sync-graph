@@ -1,0 +1,181 @@
+{
+    "$schema": "https://raw.githubusercontent.com/dotnet/dev-proxy/main/schemas/v4.0.0/mockresponseplugin.mocksfile.schema.json",
+    "mocks": [
+        {
+            "request": {
+                "url": "https://login.microsoftonline.com/*/oauth2/v2.0/token",
+                "method": "POST"
+            },
+            "response": {
+                "headers": [{ "name": "Content-Type", "value": "application/json" }],
+                "body": {
+                    "token_type": "Bearer",
+                    "expires_in": 3599,
+                    "access_token": "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjQxMDI0NDQ4MDAsInRpZCI6IjExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMSIsImFwcGlkIjoiMjIyMjIyMjItMjIyMi0yMjIyLTIyMjItMjIyMjIyMjIyMjIyIiwicm9sZXMiOlsiVXNlci5SZWFkLkFsbCIsIkNvbnRhY3RzLlJlYWRXcml0ZSJdfQ.sig"
+                }
+            }
+        },
+
+        {
+            "request": {
+                "url": "https://graph.microsoft.com/v1.0/users?*",
+                "method": "GET",
+                "nth": 1
+            },
+            "response": {
+                "statusCode": 503,
+                "headers": [{ "name": "Content-Type", "value": "application/json" }],
+                "body": {
+                    "error": {
+                        "code": "serviceNotAvailable",
+                        "message": "The service is temporarily unavailable."
+                    }
+                }
+            }
+        },
+        {
+            "request": {
+                "url": "https://graph.microsoft.com/v1.0/users?*",
+                "method": "GET",
+                "nth": 2
+            },
+            "response": {
+                "headers": [{ "name": "Content-Type", "value": "application/json" }],
+                "body": {
+                    "value": [
+                        {
+                            "id": "ann",
+                            "displayName": "Ann Lee",
+                            "mail": "ann@contoso.com",
+                            "userPrincipalName": "ann@contoso.com",
+                            "mobilePhone": "+31 6 1",
+                            "businessPhones": [],
+                            "accountEnabled": true,
+                            "userType": "Member"
+                        },
+                        {
+                            "id": "bob",
+                            "displayName": "Bob Ray",
+                            "mail": "bob@contoso.com",
+                            "userPrincipalName": "bob@contoso.com",
+                            "mobilePhone": "+31 6 2",
+                            "businessPhones": [],
+                            "accountEnabled": true,
+                            "userType": "Member"
+                        }
+                    ]
+                }
+            }
+        },
+
+        {
+            "request": {
+                "url": "https://graph.microsoft.com/v1.0/users/ann%40contoso.com/contactFolders?*",
+                "method": "GET",
+                "nth": 1
+            },
+            "response": {
+                "statusCode": 429,
+                "headers": [
+                    { "name": "Content-Type", "value": "application/json" },
+                    { "name": "Retry-After", "value": "2" }
+                ],
+                "body": { "error": { "code": "TooManyRequests", "message": "Too many requests." } }
+            }
+        },
+        {
+            "request": {
+                "url": "https://graph.microsoft.com/v1.0/users/ann%40contoso.com/contactFolders?*",
+                "method": "GET",
+                "nth": 2
+            },
+            "response": {
+                "headers": [{ "name": "Content-Type", "value": "application/json" }],
+                "body": { "value": [] }
+            }
+        },
+        {
+            "request": {
+                "url": "https://graph.microsoft.com/v1.0/users/ann%40contoso.com/contactFolders",
+                "method": "POST"
+            },
+            "response": {
+                "statusCode": 201,
+                "headers": [{ "name": "Content-Type", "value": "application/json" }],
+                "body": { "id": "folder1", "displayName": "GAL" }
+            }
+        },
+
+        {
+            "request": {
+                "url": "https://graph.microsoft.com/v1.0/users/bob%40contoso.com/contactFolders?*",
+                "method": "GET"
+            },
+            "response": {
+                "statusCode": 429,
+                "headers": [
+                    { "name": "Content-Type", "value": "application/json" },
+                    { "name": "Retry-After", "value": "1" }
+                ],
+                "body": { "error": { "code": "TooManyRequests", "message": "Too many requests." } }
+            }
+        },
+
+        {
+            "request": {
+                "url": "https://graph.microsoft.com/v1.0/users/carl%40contoso.com/contactFolders?*",
+                "method": "GET"
+            },
+            "response": {
+                "statusCode": 403,
+                "headers": [{ "name": "Content-Type", "value": "application/json" }],
+                "body": {
+                    "error": {
+                        "code": "ErrorAccessDenied",
+                        "message": "Access is denied. Check credentials and try again."
+                    }
+                }
+            }
+        },
+
+        {
+            "request": {
+                "url": "https://graph.microsoft.com/v1.0/$batch",
+                "method": "POST",
+                "nth": 1
+            },
+            "response": {
+                "headers": [{ "name": "Content-Type", "value": "application/json" }],
+                "body": {
+                    "responses": [
+                        {
+                            "id": "0",
+                            "status": 429,
+                            "headers": { "Retry-After": "1" },
+                            "body": {
+                                "error": {
+                                    "code": "TooManyRequests",
+                                    "message": "Too many requests."
+                                }
+                            }
+                        },
+                        { "id": "1", "status": 201, "body": {} }
+                    ]
+                }
+            }
+        },
+        {
+            "request": {
+                "url": "https://graph.microsoft.com/v1.0/$batch",
+                "method": "POST",
+                "nth": 2
+            },
+            "response": {
+                "headers": [{ "name": "Content-Type", "value": "application/json" }],
+                "body": {
+                    "responses": [{ "id": "0", "status": 201, "body": {} }]
+                }
+            }
+        }
+    ]
+}

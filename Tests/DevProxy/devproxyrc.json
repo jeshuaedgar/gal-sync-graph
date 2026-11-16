@@ -1,0 +1,18 @@
+{
+    "$schema": "https://raw.githubusercontent.com/dotnet/dev-proxy/main/schemas/v4.0.0/rc.schema.json",
+    "plugins": [
+        {
+            "name": "MockResponsePlugin",
+            "enabled": true,
+            "pluginPath": "~appFolder/plugins/DevProxy.Plugins.dll",
+            "configSection": "mocksPlugin"
+        }
+    ],
+    "urlsToWatch": ["https://graph.microsoft.com/*", "https://login.microsoftonline.com/*"],
+    "mocksPlugin": {
+        "$schema": "https://raw.githubusercontent.com/dotnet/dev-proxy/main/schemas/v4.0.0/mockresponseplugin.schema.json",
+        "mocksFile": "mocks.json",
+        "blockUnmockedRequests": true
+    },
+    "logLevel": "information"
+}

@@ -1,0 +1,80 @@
+name: Beta feedback
+description: Tell us how your first sync went
+title: "Beta feedback: "
+labels: ["beta-feedback"]
+assignees:
+  - JeshuaEdgar
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying the beta. Working and not working are both useful to hear.
+        Do not post secrets, tokens, tenant or application IDs, names or email addresses.
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: How did your first sync go?
+      options:
+        - It worked as expected
+        - It worked, but something was confusing
+        - It ran, but the result was wrong
+        - It failed
+        - I could not get it to start
+    validations:
+      required: true
+  - type: dropdown
+    id: target
+    attributes:
+      label: Target
+      options:
+        - TargetMailbox (one mailbox)
+        - TargetGroup
+        - AllUsers
+    validations:
+      required: true
+  - type: input
+    id: size
+    attributes:
+      label: Size
+      description: Roughly how many directory users (contacts) and how many target mailboxes?
+      placeholder: "about 800 contacts, 3 mailboxes"
+  - type: dropdown
+    id: signin
+    attributes:
+      label: Sign-in method
+      options:
+        - Managed identity
+        - Certificate
+        - Client secret
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: runs
+    attributes:
+      label: Where it runs
+      options:
+        - Azure Automation
+        - Task Scheduler or cron
+        - Interactive
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: What was confusing, missing or slow?
+      description: Setup, permissions, documentation, run time, anything.
+  - type: textarea
+    id: failures
+    attributes:
+      label: Failed or skipped mailboxes
+      description: The reasons you saw, with names and addresses removed.
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: |
+        In Azure Automation: start the `GAL-Sync` runbook with `Diagnostic` set to true and copy the job output.
+        From PowerShell: `Get-GALDiagnostic -Result $results | Set-Clipboard`. Read it before you post.
+      render: markdown

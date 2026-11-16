@@ -1,46 +1,64 @@
+[CmdletBinding(SupportsShouldProcess)]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSAvoidUsingPlainTextForPassword", "CredentialPath", Justification = "File path, not a secret.")]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSReviewUnusedParameter", "", Justification = "Parameters are read through PSBoundParameters.")]
 param (
-    [CmdletBinding()]
-    [parameter(Mandatory)][System.IO.FileInfo]$CredentialPath,
-    [parameter(Mandatory)][string]$Tenant,
-    [parameter(Mandatory)][string]$ContactFolderName,
-    [string]$AzureADGroup,
-    [string[]]$MailboxList,
-    [switch]$Directory,
+    [string]$ConfigFile,
     [string]$LogPath,
-    [switch]$ContactsWithoutPhoneNumber,
-    [switch]$ContactsWithoutEmail,
-    [switch]$UseGraphSDK
+
+    [string]$TenantId,
+    [string]$ClientId,
+    [string]$CertificateThumbprint,
+    [string]$CredentialPath,
+
+    [string]$ContactFolderName,
+    [switch]$AllUsers,
+    [string]$TargetGroup,
+    [string[]]$TargetMailbox,
+    [string]$SourceGroup,
+    [string[]]$ExcludeUser,
+    [string]$UserFilter,
+    [switch]$ExcludeHiddenFromAddressList,
+    [switch]$IncludeOrgContacts,
+    [switch]$BusinessPhoneAsMobile,
+    [switch]$IncludeUsersWithoutPhone,
+    [switch]$IncludeUsersWithoutEmail,
+    [switch]$IncludeDisabledUsers,
+    [switch]$IncludeGuests,
+    [int]$ThrottleLimit
 )
 
-Set-Variable -Name UseGraphSDK -Value $UseGraphSDK -Scope Global -Option ReadOnly
+$ErrorActionPreference = "Stop"
+$exitCode = 0
+$transcript = $false
 
-if ($LogPath) {
-    Start-Transcript -OutputDirectory $LogPath
-}
-
-Write-Verbose "Using $(If ($UseGraphSDK) {"Graph SDK"} Else {"raw REST requests"}) for connection"
-If ($UseGraphSDK) { Import-Module Microsoft.Graph.PersonalContacts }
-
-Import-Module .\Module\GAL-Sync.psm1 -Force
-Connect-GALSync -CredentialFile $CredentialPath -Tenant $Tenant
-
-# Get users based on input
-if ($Directory) { $mailBoxesToSync = (Get-GALContacts -ContactsWithoutPhoneNumber $true).emailaddresses | Select-Object -ExpandProperty address }
-elseif ($AzureADGroup) { $mailBoxesToSync = Get-GALAADGroupMembers -Name $AzureADGroup | Select-Object -ExpandProperty mail }
-elseif ($MailboxList -is [array]) { $mailBoxesToSync = $MailboxList }
-else { Write-Error "No valid mailbox input"; Read-Host; exit 1 }
-
-$GALContacts = Get-GALContacts -ContactsWithoutPhoneNumber $ContactsWithoutPhoneNumber -ContactsWithoutEmail $ContactsWithoutEmail
-
-foreach ($mailBox in $mailBoxesToSync) {
-    try {
-        Sync-GALContacts -Mailbox $mailBox -ContactList $GALContacts -ContactFolderName $ContactFolderName
+try {
+    if (-not $LogPath -and $ConfigFile) {
+        $LogPath = (Get-Content -Path $ConfigFile -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable).LogPath
     }
-    catch {
-        Write-LogEvent -Level Error -Message $_.Exception.Message
-        Write-LogEvent -Level Error -Message "Failed to sync mailbox: $($mailBox)"
+    if ($LogPath) {
+        Start-Transcript -OutputDirectory $LogPath -WhatIf:$false | Out-Null
+        $transcript = $true
+    }
+
+    # the repository copy when run from a clone, otherwise the module installed from the PowerShell Gallery
+    $repositoryModule = Join-Path $PSScriptRoot "Module/GAL-Sync.psd1"
+    Import-Module ((Test-Path $repositoryModule) ? $repositoryModule : "GAL-Sync") -Force
+
+    $parameters = @{} + $PSBoundParameters
+    $parameters.Remove("LogPath")
+    $results = @(Start-GALSync @parameters)
+    $results | Format-Table -AutoSize | Out-String -Width 200 | Write-Output
+    if ($results | Where-Object { $_.Status -eq "Failed" }) {
+        $exitCode = 1
     }
 }
-if ($LogPath) {
-    Stop-Transcript
+catch {
+    Write-Error $_ -ErrorAction Continue
+    $exitCode = 1
 }
+finally {
+    if ($transcript) {
+        Stop-Transcript -WhatIf:$false | Out-Null
+    }
+}
+exit $exitCode

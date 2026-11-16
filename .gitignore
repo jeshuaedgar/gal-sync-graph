@@ -1,2 +1,5 @@
 settings.local.json
-credential.cred
+Sync-Contacts.settings.json
+*.cred
+Logs/
+out/
